@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="az">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Kalori AI — şəkildən kalori</title>
+  <meta name="description" content="Yeməyin şəklini çək: süni intellekt yeməyi tanıyır, tərkibini, kalorisini və qida dəyərini hesablayır.">
+  <meta name="theme-color" content="#f2f5f3">
+  <meta name="color-scheme" content="light dark">
+  <script>
+    (function () {
+      try {
+        var saved = JSON.parse(localStorage.getItem('kalorai.settings.v1') || '{}');
+        var theme = saved.theme;
+        if (theme === 'light' || theme === 'dark') document.documentElement.setAttribute('data-theme', theme);
+        var dark = theme === 'dark' || (theme !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        var meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.setAttribute('content', dark ? '#070b0a' : '#f2f5f3');
+      } catch (e) {}
+    })();
+  </script>
+
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Kalori AI">
+
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" href="icons/icon-192.png" sizes="192x192">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <img class="brand-mark" src="icons/icon-192.png" alt="" width="38" height="38">
+        <div class="brand-text">
+          <strong>Kalori AI</strong>
+          <span id="todayLabel">—</span>
+        </div>
+      </div>
+      <button class="icon-btn" id="btnSettings" type="button" aria-label="Ayarlar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="3.2"></circle>
+          <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9v.09a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1Z"></path>
+        </svg>
+      </button>
+    </header>
+
+    <main class="view active" id="view-home">
+      <section class="hero">
+        <div class="hero-glow"></div>
+        <span class="pill">Süni intellektlə</span>
+        <h1>Yeməyin şəklini çək,<br><em>kalorisini bil</em></h1>
+        <p class="hero-sub">AI yeməyi tanıyır, içində nə varsa qram-qram ayırır və qida dəyərini hesablayır.</p>
+
+        <div class="hero-actions">
+          <button class="btn btn-lime" id="btnCamera" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4 8.5A2.5 2.5 0 0 1 6.5 6h1.1l.8-1.3A2 2 0 0 1 10.1 4h3.8a2 2 0 0 1 1.7.7L16.4 6h1.1A2.5 2.5 0 0 1 20 8.5v8A2.5 2.5 0 0 1 17.5 19h-11A2.5 2.5 0 0 1 4 16.5Z"></path>
+              <circle cx="12" cy="12.4" r="3.2"></circle>
+            </svg>
+            Kamera
+          </button>
+          <button class="btn btn-dark" id="btnGallery" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="3" y="4" width="18" height="16" rx="3"></rect>
+              <circle cx="8.5" cy="9.5" r="1.6"></circle>
+              <path d="m4 17 4.7-4.4a2 2 0 0 1 2.7 0L20 20"></path>
+            </svg>
+            Qalereya
+          </button>
+        </div>
+
+        <button class="status-btn" id="aiStatus" type="button"></button>
+        <button class="link-btn" id="btnSample" type="button">Nümunə nəticəyə bax →</button>
+      </section>
+
+      <input type="file" id="fileCamera" accept="image/*" capture="environment" hidden>
+      <input type="file" id="fileGallery" accept="image/*" hidden>
+
+      <div class="banner hidden" id="iosHint">
+        <span>📲 iPhone-da quraşdırmaq üçün Safari-də <b>Paylaş → Ekrana əlavə et</b> seç.</span>
+        <button type="button" id="btnIosClose" aria-label="Bağla">×</button>
+      </div>
+
+      <section class="card hidden" id="analyzeCard">
+        <div class="photo">
+          <img id="previewImg" alt="Seçilmiş yemək şəkli">
+          <button class="photo-clear" id="btnClear" type="button" aria-label="Şəkli sil">×</button>
+        </div>
+        <button class="btn btn-primary btn-block" id="btnAnalyze" type="button">AI ilə analiz et</button>
+        <p class="hint" id="analyzeHint">Şəkil yalnız seçdiyin AI provayderinə göndərilir.</p>
+      </section>
+
+      <section class="card loading hidden" id="loadingCard">
+        <div class="spinner" aria-hidden="true"></div>
+        <p class="loading-text" id="loadingText" aria-live="polite">AI şəkli analiz edir…</p>
+        <div class="skeleton"><span></span><span></span><span></span></div>
+      </section>
+
+      <section class="card hidden" id="errorCard">
+        <div class="error-icon" aria-hidden="true">!</div>
+        <h3 id="errorText">Xəta baş verdi</h3>
+        <p class="hint" id="errorDetail" hidden></p>
+        <div class="row-actions">
+          <button class="btn btn-primary" id="btnRetry" type="button">Yenidən cəhd et</button>
+          <button class="btn btn-outline" id="btnErrorSettings" type="button">Ayarlar</button>
+        </div>
+      </section>
+
+      <section class="card hidden" id="resultCard">
+        <div id="resultBody"></div>
+      </section>
+
+      <section class="card summary" id="homeSummary"></section>
+
+      <section class="card how">
+        <h3>Necə işləyir?</h3>
+        <ol class="steps">
+          <li><span>1</span><div><b>Şəkil çək</b><small>Kamera və ya qalereyadan seç</small></div></li>
+          <li><span>2</span><div><b>AI tanısın</b><small>Yemək, tərkib və qramlar müəyyən olunur</small></div></li>
+          <li><span>3</span><div><b>Gündəliyə yaz</b><small>Qramı düzəlt, kalorini izlə</small></div></li>
+        </ol>
+      </section>
+    </main>
+
+    <main class="view" id="view-diary">
+      <div class="section-head">
+        <h2>Gündəlik</h2>
+        <button class="btn btn-sm btn-outline" id="btnManual" type="button">+ Əl ilə</button>
+      </div>
+
+      <section class="card hidden" id="manualCard">
+        <h3>Əl ilə əlavə et</h3>
+        <form id="manualForm">
+          <label class="field">Yeməyin adı
+            <input id="mName" type="text" placeholder="Məs. Toyuq şorba" maxlength="60" required>
+          </label>
+          <div class="grid-2">
+            <label class="field">Kalori (kkal)
+              <input id="mKcal" type="number" inputmode="numeric" min="1" max="5000" placeholder="350" required>
+            </label>
+            <label class="field">Zülal (q)
+              <input id="mProtein" type="number" inputmode="decimal" min="0" max="500" step="0.1" placeholder="20">
+            </label>
+            <label class="field">Karbohidrat (q)
+              <input id="mCarbs" type="number" inputmode="decimal" min="0" max="500" step="0.1" placeholder="40">
+            </label>
+            <label class="field">Yağ (q)
+              <input id="mFat" type="number" inputmode="decimal" min="0" max="500" step="0.1" placeholder="10">
+            </label>
+          </div>
+          <div class="row-actions">
+            <button class="btn btn-primary" type="submit">Əlavə et</button>
+            <button class="btn btn-outline" type="button" id="btnManualCancel">Ləğv et</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="card day-nav-card">
+        <button class="day-arrow" id="dayPrev" type="button" aria-label="Əvvəlki gün">‹</button>
+        <div class="day-center">
+          <strong id="dayTitle">Bugün</strong>
+          <span id="daySub"></span>
+          <button class="link-btn" id="btnToday" type="button">Bugünə qayıt</button>
+        </div>
+        <button class="day-arrow" id="dayNext" type="button" aria-label="Növbəti gün">›</button>
+      </section>
+
+      <section class="card ring-card" id="diaryRing"></section>
+
+      <section class="card" id="weekCard">
+        <div class="card-head">
+          <h3>Son 7 gün</h3>
+          <span class="muted" id="weekMeta"></span>
+        </div>
+        <div class="chart" id="weekChart"></div>
+      </section>
+
+      <section class="card" id="todayCard"></section>
+      <section class="card" id="daysCard"></section>
+    </main>
+
+    <main class="view" id="view-settings">
+      <h2 class="page-title">Ayarlar</h2>
+
+      <form class="card form" id="settingsForm">
+        <h3>Görünüş</h3>
+        <p class="help">Telefonun rejiminə uyğun avtomatik seçilir.</p>
+        <div class="segmented" id="themeSwitch" role="group" aria-label="Tema">
+          <button type="button" data-theme-opt="auto">Avtomatik</button>
+          <button type="button" data-theme-opt="light">Açıq</button>
+          <button type="button" data-theme-opt="dark">Tünd</button>
+        </div>
+
+        <h3 class="mt">Hədəf</h3>
+        <label class="field">Gündəlik kalori hədəfi (kkal)
+          <input id="setGoal" type="number" inputmode="numeric" min="800" max="8000" step="10" required>
+        </label>
+
+        <h3 class="mt">AI modeli</h3>
+        <label class="field">Model
+          <input id="setModel" type="text" spellcheck="false" placeholder="gemini-3.6-flash">
+        </label>
+
+        <div class="model-tools">
+          <button class="btn btn-outline btn-sm" id="btnFetchModels" type="button">Mövcud modelləri gətir</button>
+          <span class="model-status" id="modelStatus"></span>
+        </div>
+
+        <label class="field hidden" id="modelSelectWrap">Mövcud modellər
+          <select id="modelSelect"></select>
+        </label>
+
+        <p class="help">Model adları tez dəyişir. “Mövcud modelləri gətir” düyməsi açarına uyğun işləyən modelləri siyahıya salır.</p>
+
+        <button class="btn btn-primary btn-block" type="submit">Yadda saxla</button>
+      </form>
+
+      <section class="card">
+        <h3>Məlumat və təhlükəsizlik</h3>
+        <p class="text-sm">AI açarı tətbiqin kodunda (<b>config.js</b>) saxlanılır və interfeysdə göstərilmir. Qeydlər, ayarlar və hədəf yalnız bu cihazda (localStorage) qalır. Şəkil birbaşa Google Gemini-yə göndərilir.</p>
+        <p class="text-sm">AI nəticəsi təxminidir və tibbi məsləhət deyil. Xroniki xəstəlik, hamiləlik və ya xüsusi pəhriz zamanı həkimə müraciət et.</p>
+        <button class="btn btn-danger btn-block" id="btnWipe" type="button">Bütün məlumatları sil</button>
+      </section>
+
+      <p class="footer-note">Kalori AI · PWA · v1.1</p>
+    </main>
+  </div>
+
+  <nav class="tabbar" aria-label="Bölmələr">
+    <div class="tabbar-inner">
+      <button class="tab active" data-tab="home" type="button" aria-selected="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 8.5A2.5 2.5 0 0 1 6.5 6h1.1l.8-1.3A2 2 0 0 1 10.1 4h3.8a2 2 0 0 1 1.7.7L16.4 6h1.1A2.5 2.5 0 0 1 20 8.5v8A2.5 2.5 0 0 1 17.5 19h-11A2.5 2.5 0 0 1 4 16.5Z"></path>
+          <circle cx="12" cy="12.4" r="3.2"></circle>
+        </svg>
+        <span>Analiz</span>
+      </button>
+      <button class="tab" data-tab="diary" type="button" aria-selected="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M8 6h12M8 12h12M8 18h12"></path>
+          <circle cx="4" cy="6" r="1"></circle>
+          <circle cx="4" cy="12" r="1"></circle>
+          <circle cx="4" cy="18" r="1"></circle>
+        </svg>
+        <span>Gündəlik</span>
+      </button>
+      <button class="tab" data-tab="settings" type="button" aria-selected="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="3.2"></circle>
+          <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9v.09a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1Z"></path>
+        </svg>
+        <span>Ayarlar</span>
+      </button>
+    </div>
+  </nav>
+
+  <div class="sheet-backdrop hidden" id="foodSheet">
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="foodSheetTitle">
+      <div class="sheet-head">
+        <h3 id="foodSheetTitle">Ərzaq əlavə et</h3>
+        <button class="sheet-close" id="foodClose" type="button" aria-label="Bağla">×</button>
+      </div>
+      <input class="sheet-search" id="foodSearch" type="search" placeholder="Axtar: toyuq, düyü, alma…" autocomplete="off">
+      <div class="food-list" id="foodList"></div>
+      <button class="food-custom-btn" id="foodCustomBtn" type="button">＋ Siyahıda yoxdur — özün yaz</button>
+      <form class="food-custom hidden" id="foodCustomForm">
+        <label class="field">Ad
+          <input id="fcName" type="text" placeholder="Məs. Evdə bişmiş kükü" maxlength="60" required>
+        </label>
+        <div class="grid-2">
+          <label class="field">100 q üçün kkal
+            <input id="fcKcal" type="number" inputmode="numeric" min="0" max="2000" placeholder="250" required>
+          </label>
+          <label class="field">Zülal (q)
+            <input id="fcProtein" type="number" inputmode="decimal" min="0" max="200" step="0.1" placeholder="10">
+          </label>
+          <label class="field">Karbohidrat (q)
+            <input id="fcCarbs" type="number" inputmode="decimal" min="0" max="200" step="0.1" placeholder="25">
+          </label>
+          <label class="field">Yağ (q)
+            <input id="fcFat" type="number" inputmode="decimal" min="0" max="200" step="0.1" placeholder="12">
+          </label>
+        </div>
+        <button class="btn btn-primary btn-block" type="submit">Əlavə et (100 q)</button>
+      </form>
+    </div>
+  </div>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <noscript><p style="padding:24px;font-family:sans-serif">Bu tətbiq üçün JavaScript lazımdır.</p></noscript>
+  <script src="config.js"></script>
+  <script src="foods.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

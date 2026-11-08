@@ -1,0 +1,1691 @@
+'use strict';
+
+/* =========================================================
+   Kalori AI — PWA
+   Şəkildən yemək analizi + gündəlik kalori jurnalı
+   ========================================================= */
+
+const $ = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+
+const LS = {
+  settings: 'kalorai.settings.v1',
+  entries: 'kalorai.entries.v1',
+  iosHint: 'kalorai.iosHint.v1',
+};
+
+const CONFIG = window.KALORI_CONFIG || {};
+const FOOD_DB = Array.isArray(window.FOOD_DB) ? window.FOOD_DB : [];
+
+const AI = {
+  name: 'Google Gemini',
+  model: 'gemini-3.6-flash',
+};
+
+const DEFAULT_SETTINGS = {
+  model: AI.model,
+  goal: 2000,
+  theme: 'auto',
+};
+
+const AZ_MONTHS = ['yanvar', 'fevral', 'mart', 'aprel', 'may', 'iyun', 'iyul', 'avqust', 'sentyabr', 'oktyabr', 'noyabr', 'dekabr'];
+const AZ_WEEKDAYS = ['bazar', 'bazar ertəsi', 'çərşənbə axşamı', 'çərşənbə', 'cümə axşamı', 'cümə', 'şənbə'];
+const WD = ['B', 'B.e', 'Ç.a', 'Ç', 'C.a', 'C', 'Ş'];
+
+// Model adları tez-tez dəyişir: 404 olsa, növbəti modelə keçilir.
+const GEMINI_FALLBACKS = ['gemini-3.6-flash', 'gemini-3.7-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'];
+
+const LOAD_MSGS = [
+  'Şəkil hazırlanır…',
+  'AI yeməyi analiz edir…',
+  'Tərkib hissələri müəyyən edilir…',
+  'Qramlar və kalori hesablanır…',
+];
+
+const PROMPT = `You are a precise nutrition analyst inside a calorie-tracking app.
+
+Look at the food in the photo and identify what is served on the plate.
+
+Return these fields:
+- dish: dish name in Azerbaijani (latin letters), max 6 words.
+- description: 1-2 sentences in Azerbaijani describing what the dish is.
+- cuisine: cuisine or dish type in Azerbaijani (e.g. "Azərbaycan mətbəxi", "fast food", "salat").
+- ingredients: every visible component, with the estimated weight in grams for the whole portion shown, plus kcal/protein/carbs/fat for exactly that weight. Include oil, sauce or dressing if visible. 1 to 8 items.
+- totals: sum of all ingredients (kcal, protein, carbs, fat, fiber in grams).
+- confidence: 0 to 1, how sure you are about the identification.
+- notes: one short Azerbaijani sentence about assumptions (e.g. "Yağ miqdarı təxminidir."), or empty.
+- health: one short Azerbaijani sentence about nutritional quality.
+
+Rules:
+- Grams are for the cooked food as served, not raw.
+- Each ingredient's kcal and macros must match its grams (4 kcal/g protein, 4 kcal/g carbs, 9 kcal/g fat).
+- Be realistic: a normal plate is 300-700 g. Never invent ingredients that are not visible.
+- If there is no food in the image, set dish to "Yemək tapılmadı", ingredients to [], totals to zero, and explain in notes.
+
+Answer with valid JSON only, no markdown, exactly this shape:
+{"dish":"","description":"","cuisine":"","ingredients":[{"name":"","grams":0,"kcal":0,"protein":0,"carbs":0,"fat":0}],"totals":{"kcal":0,"protein":0,"carbs":0,"fat":0,"fiber":0},"confidence":0,"notes":"","health":""}`;
+
+const SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    dish: { type: 'STRING' },
+    description: { type: 'STRING' },
+    cuisine: { type: 'STRING' },
+    ingredients: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: {
+          name: { type: 'STRING' },
+          grams: { type: 'NUMBER' },
+          kcal: { type: 'NUMBER' },
+          protein: { type: 'NUMBER' },
+          carbs: { type: 'NUMBER' },
+          fat: { type: 'NUMBER' },
+        },
+        required: ['name', 'grams', 'kcal', 'protein', 'carbs', 'fat'],
+      },
+    },
+    totals: {
+      type: 'OBJECT',
+      properties: {
+        kcal: { type: 'NUMBER' },
+        protein: { type: 'NUMBER' },
+        carbs: { type: 'NUMBER' },
+        fat: { type: 'NUMBER' },
+        fiber: { type: 'NUMBER' },
+      },
+      required: ['kcal', 'protein', 'carbs', 'fat'],
+    },
+    confidence: { type: 'NUMBER' },
+    notes: { type: 'STRING' },
+    health: { type: 'STRING' },
+  },
+  required: ['dish', 'ingredients', 'totals', 'confidence'],
+};
+
+const RECALC_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    ingredients: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: {
+          name: { type: 'STRING' },
+          grams: { type: 'NUMBER' },
+          kcal: { type: 'NUMBER' },
+          protein: { type: 'NUMBER' },
+          carbs: { type: 'NUMBER' },
+          fat: { type: 'NUMBER' },
+        },
+        required: ['name', 'grams', 'kcal', 'protein', 'carbs', 'fat'],
+      },
+    },
+    totals: {
+      type: 'OBJECT',
+      properties: {
+        kcal: { type: 'NUMBER' },
+        protein: { type: 'NUMBER' },
+        carbs: { type: 'NUMBER' },
+        fat: { type: 'NUMBER' },
+      },
+      required: ['kcal', 'protein', 'carbs', 'fat'],
+    },
+  },
+  required: ['ingredients'],
+};
+
+const SAMPLE = {
+  dish: 'Toyuq plovu',
+  description: 'Düyü ilə bişirilmiş toyuq əti, kərə yağı və yerkökü ilə.',
+  cuisine: 'Azərbaycan mətbəxi',
+  ingredients: [
+    { name: 'Düyü (bişmiş)', grams: 220, kcal: 286, protein: 6.2, carbs: 62, fat: 0.7 },
+    { name: 'Toyuq əti', grams: 120, kcal: 198, protein: 30, carbs: 0, fat: 8 },
+    { name: 'Kərə yağı', grams: 12, kcal: 86, protein: 0.1, carbs: 0, fat: 9.7 },
+    { name: 'Yerkökü', grams: 30, kcal: 12, protein: 0.3, carbs: 2.8, fat: 0.1 },
+  ],
+  totals: { kcal: 582, protein: 36.6, carbs: 64.8, fat: 18.5, fiber: 2.1 },
+  confidence: 0.86,
+  notes: 'Yağ miqdarı və porsiya ölçüsü təxminidir.',
+  health: 'Zülalla zəngindir, lakin düyü və yağ kalorini artırır.',
+};
+
+/* ---------------- state ---------------- */
+
+const state = {
+  tab: 'home',
+  pending: null,
+  analysis: null,
+  busy: false,
+  settings: { ...DEFAULT_SETTINGS },
+  entries: [],
+  selectedDate: '',
+  expanded: new Set(),
+};
+
+/* ---------------- helpers ---------------- */
+
+class AppError extends Error {
+  constructor(message, detail) {
+    super(message);
+    this.name = 'AppError';
+    this.detail = detail || '';
+  }
+}
+
+const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
+
+const num = (value) => {
+  if (typeof value === 'number' && isFinite(value)) return value;
+  const match = String(value ?? '').replace(',', '.').match(/-?\d+(?:\.\d+)?/);
+  return match ? parseFloat(match[0]) : 0;
+};
+
+const round1 = (n) => Math.round(n * 10) / 10;
+
+const fmt = (n) => {
+  const v = Math.round(num(n));
+  return String(v).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+};
+
+const dateKey = (d = new Date()) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+const uid = () =>
+  window.crypto && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `e${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+
+const esc = (value) =>
+  String(value ?? '').replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  }[c]));
+
+function readJSON(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeJSON(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    toast('Yaddaş dolub. Köhnə qeydləri sil.');
+  }
+}
+
+function loadSettings() {
+  const saved = readJSON(LS.settings, {}) || {};
+  const s = {
+    model: String(saved.model || AI.model),
+    goal: clamp(Math.round(num(saved.goal) || 2000), 800, 8000),
+    theme: ['auto', 'light', 'dark'].includes(saved.theme) ? saved.theme : 'auto',
+  };
+  // Yeni istifadəçilər üçün bağlanmış köhnə Gemini modellərini avtomatik yenilə
+  if (/^gemini-(1\.5|2\.0|2\.5)(-|$)/.test(s.model)) {
+    s.model = AI.model;
+  }
+  return s;
+}
+
+/* ---------------- toast ---------------- */
+
+let toastTimer = null;
+
+function toast(message) {
+  const el = $('#toast');
+  if (!el) return;
+  el.textContent = message;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2600);
+}
+
+/* ---------------- init ---------------- */
+
+document.addEventListener('DOMContentLoaded', init);
+
+function init() {
+  state.settings = loadSettings();
+  state.entries = readJSON(LS.entries, []);
+  if (!Array.isArray(state.entries)) state.entries = [];
+  state.selectedDate = dateKey();
+
+  // köhnə versiyadan qalan açar/provider sahələrini yaddaşdan sil
+  writeJSON(LS.settings, state.settings);
+
+  bindEvents();
+  applyTheme(state.settings.theme);
+  bindSystemTheme();
+  renderTodayLabel();
+  fillSettings();
+  renderAiStatus();
+  renderHomeSummary();
+  renderDiary();
+  setTab('home');
+  maybeShowIosHint();
+  registerSW();
+}
+
+function bindEvents() {
+  $('#btnCamera').addEventListener('click', () => $('#fileCamera').click());
+  $('#btnGallery').addEventListener('click', () => $('#fileGallery').click());
+  $('#fileCamera').addEventListener('change', onPickFile);
+  $('#fileGallery').addEventListener('change', onPickFile);
+
+  $('#btnAnalyze').addEventListener('click', () => analyze());
+  $('#btnClear').addEventListener('click', resetCapture);
+  $('#btnRetry').addEventListener('click', () => analyze());
+  $('#btnErrorSettings').addEventListener('click', () => setTab('settings'));
+  $('#btnSample').addEventListener('click', loadSample);
+  $('#btnSettings').addEventListener('click', () => setTab('settings'));
+  $('#aiStatus').addEventListener('click', () => setTab('settings'));
+  $('#btnIosClose').addEventListener('click', dismissIosHint);
+
+  $('#btnManual').addEventListener('click', () => {
+    $('#manualCard').classList.remove('hidden');
+    $('#manualCard').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setTimeout(() => $('#mName').focus(), 250);
+  });
+  $('#btnManualCancel').addEventListener('click', () => {
+    $('#manualCard').classList.add('hidden');
+    $('#manualForm').reset();
+  });
+  $('#manualForm').addEventListener('submit', onManualSubmit);
+
+  $('#settingsForm').addEventListener('submit', onSaveSettings);
+  $('#btnFetchModels').addEventListener('click', loadGeminiModels);
+  $('#btnWipe').addEventListener('click', wipeData);
+
+  $('#themeSwitch').addEventListener('click', onThemeChoice);
+  $('#dayPrev').addEventListener('click', () => shiftDay(-1));
+  $('#dayNext').addEventListener('click', () => shiftDay(1));
+  $('#btnToday').addEventListener('click', () => selectDate(dateKey()));
+
+  $('#foodClose').addEventListener('click', closeFoodSheet);
+  $('#foodSearch').addEventListener('input', (event) => renderFoodList(event.target.value));
+  $('#foodList').addEventListener('click', onFoodListClick);
+  $('#foodCustomBtn').addEventListener('click', toggleCustomFood);
+  $('#foodCustomForm').addEventListener('submit', onCustomFoodSubmit);
+  $('#foodSheet').addEventListener('click', (event) => {
+    if (event.target.id === 'foodSheet') closeFoodSheet();
+  });
+
+  $('#resultCard').addEventListener('change', onGramChange);
+  $('#resultCard').addEventListener('click', onResultClick);
+  document.addEventListener('click', onGlobalClick);
+}
+
+/* ---------------- navigation ---------------- */
+
+function setTab(tab) {
+  state.tab = tab;
+  $$('.view').forEach((view) => view.classList.toggle('active', view.id === `view-${tab}`));
+  $$('.tab').forEach((btn) => {
+    const active = btn.dataset.tab === tab;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+  if (tab === 'diary') renderDiary();
+  if (tab === 'settings') fillSettings();
+  if (tab === 'home') renderHomeSummary();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function onGlobalClick(event) {
+  const tabBtn = event.target.closest('[data-tab]');
+  if (tabBtn) {
+    setTab(tabBtn.dataset.tab);
+    return;
+  }
+
+  const del = event.target.closest('[data-del]');
+  if (del) {
+    event.stopPropagation();
+    removeEntry(del.dataset.del);
+    return;
+  }
+
+  const dayBtn = event.target.closest('[data-day]');
+  if (dayBtn) {
+    selectDate(dayBtn.dataset.day);
+    return;
+  }
+
+  const expand = event.target.closest('[data-expand]');
+  if (expand) {
+    toggleEntryDetails(expand.dataset.expand);
+  }
+}
+
+function renderTodayLabel() {
+  const d = new Date();
+  $('#todayLabel').textContent = `${d.getDate()} ${AZ_MONTHS[d.getMonth()]}, ${AZ_WEEKDAYS[d.getDay()]}`;
+}
+
+/* ---------------- capture & compress ---------------- */
+
+function onPickFile(event) {
+  const file = event.target.files && event.target.files[0];
+  event.target.value = '';
+  if (file) handleFile(file);
+}
+
+async function handleFile(file) {
+  if (!file.type.startsWith('image/')) {
+    toast('Şəkil faylı seç');
+    return;
+  }
+  if (file.size > 20 * 1024 * 1024) {
+    toast('Şəkil çox böyükdür (max 20 MB)');
+    return;
+  }
+  try {
+    const source = await decodeImage(file);
+    const { dataUrl, thumb } = drawScaled(source);
+    if (source.close) source.close();
+
+    state.pending = { dataUrl, thumb };
+    state.analysis = null;
+
+    $('#previewImg').src = dataUrl;
+    $('#analyzeHint').textContent = 'Şəkil Google Gemini-yə göndəriləcək.';
+    $('#btnAnalyze').disabled = false;
+    $('#btnAnalyze').textContent = 'AI ilə analiz et';
+
+    $('#errorCard').classList.add('hidden');
+    $('#loadingCard').classList.add('hidden');
+    $('#resultCard').classList.add('hidden');
+    $('#analyzeCard').classList.remove('hidden');
+    $('#analyzeCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (err) {
+    console.warn(err);
+    toast('Şəkil açılmadı. JPEG/PNG formatında yoxla.');
+  }
+}
+
+function decodeImage(file) {
+  if (window.createImageBitmap) {
+    return createImageBitmap(file, { imageOrientation: 'from-image' }).catch(() => loadImageElement(file));
+  }
+  return loadImageElement(file);
+}
+
+function loadImageElement(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(img);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('decode'));
+    };
+    img.src = url;
+  });
+}
+
+function drawScaled(source) {
+  const sw = source.width;
+  const sh = source.height;
+  const scale = Math.min(1, 1200 / Math.max(sw, sh));
+  const w = Math.max(1, Math.round(sw * scale));
+  const h = Math.max(1, Math.round(sh * scale));
+
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(source, 0, 0, w, h);
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.86);
+
+  const tScale = Math.min(1, 260 / Math.max(w, h));
+  const tw = Math.max(1, Math.round(w * tScale));
+  const th = Math.max(1, Math.round(h * tScale));
+  const tCanvas = document.createElement('canvas');
+  tCanvas.width = tw;
+  tCanvas.height = th;
+  tCanvas.getContext('2d').drawImage(canvas, 0, 0, tw, th);
+  const thumb = tCanvas.toDataURL('image/jpeg', 0.72);
+
+  return { dataUrl, thumb };
+}
+
+function resetCapture() {
+  state.pending = null;
+  state.analysis = null;
+  $('#previewImg').removeAttribute('src');
+  $('#analyzeCard').classList.add('hidden');
+  $('#resultCard').classList.add('hidden');
+  $('#errorCard').classList.add('hidden');
+  $('#loadingCard').classList.add('hidden');
+}
+
+/* ---------------- AI ---------------- */
+
+async function analyze() {
+  if (state.busy) return;
+  if (!state.pending) {
+    toast('Əvvəlcə şəkil seç');
+    return;
+  }
+
+  const settings = state.settings;
+  if (!CONFIG.geminiApiKey) {
+    toast('AI konfiqurasiyası tapılmadı (config.js)');
+    return;
+  }
+
+  state.busy = true;
+  $('#btnAnalyze').disabled = true;
+  $('#analyzeCard').classList.add('hidden');
+  $('#resultCard').classList.add('hidden');
+  $('#errorCard').classList.add('hidden');
+  $('#loadingCard').classList.remove('hidden');
+  startLoadingMessages();
+
+  try {
+    const raw = await analyzePhoto(state.pending.dataUrl, settings);
+    const analysis = normalizeAnalysis(raw);
+    analysis.thumb = state.pending.thumb;
+    state.analysis = analysis;
+
+    renderResult();
+    $('#loadingCard').classList.add('hidden');
+    $('#resultCard').classList.remove('hidden');
+    $('#resultCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (err) {
+    console.error(err);
+    $('#loadingCard').classList.add('hidden');
+    renderError(err);
+  } finally {
+    state.busy = false;
+    stopLoadingMessages();
+    $('#btnAnalyze').disabled = false;
+  }
+}
+
+async function analyzePhoto(dataUrl, settings) {
+  if (!dataUrl || dataUrl.indexOf(',') === -1) {
+    throw new AppError('Şəkil yoxdur. Yenidən seç.');
+  }
+  return callGemini(dataUrl, settings);
+}
+
+async function callGemini(dataUrl, settings) {
+  const base64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
+  return geminiRequest(
+    [{ text: PROMPT }, { inline_data: { mime_type: 'image/jpeg', data: base64 } }],
+    SCHEMA,
+    settings
+  );
+}
+
+async function geminiRequest(parts, schema, settings) {
+  const apiKey = CONFIG.geminiApiKey;
+  if (!apiKey) throw new AppError('AI konfiqurasiyası tapılmadı (config.js).');
+
+  const requested = (settings.model || AI.model).replace(/^models\//, '').trim();
+  const chain = [requested, ...GEMINI_FALLBACKS.filter((model) => model !== requested)].slice(0, 3);
+  let lastError = null;
+  let retired = false;
+
+  for (const model of chain) {
+    try {
+      const result = await requestGemini(parts, apiKey, model, schema);
+      if (model !== requested) {
+        if (retired) {
+          state.settings.model = model;
+          writeJSON(LS.settings, state.settings);
+          toast(`Model avtomatik yeniləndi: ${model}`);
+          if (state.tab === 'settings') fillSettings();
+        } else {
+          console.info(`“${requested}” hazırda cavab vermədi, “${model}” istifadə olundu.`);
+        }
+      }
+      return result;
+    } catch (err) {
+      lastError = err;
+      if (err instanceof AppError && err.status === 404) retired = true;
+      const retryable =
+        err instanceof AppError && (err.retryModel === true || [404, 429, 503].includes(err.status));
+      if (!retryable) throw err;
+      console.warn(`Gemini modeli “${model}” uğursuz oldu:`, err.message);
+    }
+  }
+
+  throw lastError;
+}
+
+async function requestGemini(parts, apiKey, model, schema) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+
+  const res = await request(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ role: 'user', parts }],
+      generationConfig: {
+        temperature: 0.2,
+        maxOutputTokens: 2048,
+        responseMimeType: 'application/json',
+        responseSchema: schema,
+      },
+    }),
+  });
+
+  if (!res.ok) throw await apiError(res);
+
+  const data = await res.json();
+  const candidate = data && data.candidates && data.candidates[0];
+  if (!candidate) {
+    const blocked = data && data.promptFeedback && data.promptFeedback.blockReason;
+    throw new AppError('AI cavab vermədi.', blocked ? `Səbəb: ${blocked}` : '');
+  }
+
+  const text = (candidate.content?.parts || [])
+    .filter((part) => !part.thought)
+    .map((part) => part.text || '')
+    .filter(Boolean)
+    .join('\n');
+
+  if (!text.trim()) {
+    const error = new AppError(
+      'AI cavabı boş gəldi — başqa model yoxlanılır.',
+      `Səbəb: ${candidate.finishReason || 'naməlum'}`
+    );
+    error.retryModel = true;
+    throw error;
+  }
+
+  return parseAIJson(text);
+}
+
+async function request(url, options, timeoutMs = 70000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch (err) {
+    if (err && err.name === 'AbortError') {
+      throw new AppError('AI cavab vermədi (vaxt bitdi). Yenidən cəhd et.');
+    }
+    throw new AppError('İnternetə qoşulmaq alınmadı. Bağlantını yoxla.');
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function apiError(res) {
+  let detail = '';
+  try {
+    const data = await res.json();
+    detail = data?.error?.message || data?.message || data?.error || '';
+    if (typeof detail !== 'string') detail = JSON.stringify(detail);
+  } catch {
+    try {
+      detail = (await res.text()).slice(0, 300);
+    } catch {
+      detail = '';
+    }
+  }
+
+  const map = {
+    400: 'Sorğu qəbul edilmədi (400)',
+    401: 'API açarı yanlışdır (401)',
+    403: 'Bu açarın icazəsi yoxdur (403)',
+    404: 'Model mövcud deyil (404) — Ayarlarda “Modelləri gətir” ilə yenilə',
+    413: 'Şəkil çox böyükdür (413)',
+    415: 'Şəkil formatı dəstəklənmir (415)',
+    429: 'Pulsuz limit bitdi (429)',
+    500: 'AI server xətası (500)',
+    502: 'AI server cavab vermir (502)',
+    503: 'Model hazırda yüklüdür (503) — bir az sonra yenidən cəhd et',
+  };
+
+  const error = new AppError(map[res.status] || `AI xətası (${res.status})`, detail);
+  error.status = res.status;
+  return error;
+}
+
+function parseAIJson(text) {
+  if (!text || typeof text !== 'string') {
+    throw new AppError('AI boş cavab qaytardı. Yenidən cəhd et.');
+  }
+  let clean = text.trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
+  const start = clean.indexOf('{');
+  const end = clean.lastIndexOf('}');
+  if (start === -1 || end <= start) {
+    throw new AppError('AI cavabı oxunmadı. Yenidən cəhd et.');
+  }
+  clean = clean.slice(start, end + 1);
+  try {
+    return JSON.parse(clean);
+  } catch {
+    throw new AppError('AI düzgün JSON qaytarmadı. Yenidən cəhd et.');
+  }
+}
+
+function normalizeAnalysis(raw) {
+  const obj = raw && typeof raw === 'object' ? raw : {};
+  const totalsRaw = obj.totals && typeof obj.totals === 'object' ? obj.totals : {};
+
+  const ingredients = (Array.isArray(obj.ingredients) ? obj.ingredients : [])
+    .map((item) => {
+      const grams = clamp(num(item?.grams ?? item?.weight ?? item?.qram), 0.5, 5000);
+      let protein = Math.max(0, num(item?.protein));
+      let carbs = Math.max(0, num(item?.carbs));
+      let fat = Math.max(0, num(item?.fat));
+      let kcal = Math.max(0, num(item?.kcal ?? item?.calories));
+      if (!kcal && (protein || carbs || fat)) kcal = protein * 4 + carbs * 4 + fat * 9;
+
+      return {
+        name: String(item?.name || 'Tərkib').slice(0, 80).trim(),
+        grams: Math.max(1, Math.round(grams)),
+        kcal: Math.round(kcal),
+        protein: round1(protein),
+        carbs: round1(carbs),
+        fat: round1(fat),
+        perGram: {
+          kcal: kcal / grams,
+          protein: protein / grams,
+          carbs: carbs / grams,
+          fat: fat / grams,
+        },
+      };
+    })
+    .filter((item) => item.name && item.grams > 0)
+    .slice(0, 12);
+
+  const confidenceRaw = num(obj.confidence);
+  const analysis = {
+    dish: String(obj.dish || obj.name || 'Naməlum yemək').slice(0, 120).trim(),
+    description: String(obj.description || '').slice(0, 400).trim(),
+    cuisine: String(obj.cuisine || '').slice(0, 60).trim(),
+    ingredients,
+    confidence: clamp(confidenceRaw > 1 ? confidenceRaw / 100 : confidenceRaw, 0, 1),
+    notes: String(obj.notes || '').slice(0, 500).trim(),
+    health: String(obj.health || '').slice(0, 400).trim(),
+    totals: {
+      kcal: Math.max(0, Math.round(num(totalsRaw.kcal))),
+      protein: Math.max(0, round1(num(totalsRaw.protein))),
+      carbs: Math.max(0, round1(num(totalsRaw.carbs))),
+      fat: Math.max(0, round1(num(totalsRaw.fat))),
+      fiber: Math.max(0, round1(num(totalsRaw.fiber))),
+      grams: 0,
+    },
+  };
+
+  recomputeTotals(analysis);
+  return analysis;
+}
+
+function recomputeTotals(analysis) {
+  if (!analysis.ingredients.length) {
+    analysis.totals = {
+      kcal: 0,
+      protein: 0,
+      carbs: 0,
+      fat: 0,
+      fiber: analysis.totals ? analysis.totals.fiber || 0 : 0,
+      grams: 0,
+    };
+    return;
+  }
+
+  let kcal = 0;
+  let protein = 0;
+  let carbs = 0;
+  let fat = 0;
+  let grams = 0;
+
+  for (const item of analysis.ingredients) {
+    kcal += item.kcal;
+    protein += item.protein;
+    carbs += item.carbs;
+    fat += item.fat;
+    grams += item.grams;
+  }
+
+  analysis.totals = {
+    ...analysis.totals,
+    kcal: Math.round(kcal),
+    protein: round1(protein),
+    carbs: round1(carbs),
+    fat: round1(fat),
+    grams: Math.round(grams),
+  };
+}
+
+/* ---------------- loading / error ---------------- */
+
+let loadTimer = null;
+let loadIndex = 0;
+
+function startLoadingMessages() {
+  loadIndex = 0;
+  $('#loadingText').textContent = LOAD_MSGS[0];
+  clearInterval(loadTimer);
+  loadTimer = setInterval(() => {
+    loadIndex = (loadIndex + 1) % LOAD_MSGS.length;
+    $('#loadingText').textContent = LOAD_MSGS[loadIndex];
+  }, 2200);
+}
+
+function stopLoadingMessages() {
+  clearInterval(loadTimer);
+}
+
+function renderError(err) {
+  const message = err instanceof AppError ? err.message : 'Gözlənilməz xəta baş verdi.';
+  $('#errorText').textContent = message;
+  $('#errorDetail').textContent = err && err.detail ? String(err.detail).slice(0, 400) : '';
+  $('#errorDetail').hidden = !(err && err.detail);
+  $('#errorCard').classList.remove('hidden');
+  $('#analyzeCard').classList.add('hidden');
+  $('#resultCard').classList.add('hidden');
+  $('#btnAnalyze').textContent = 'Yenidən cəhd et';
+  $('#errorCard').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+/* ---------------- result ---------------- */
+
+function renderResult() {
+  const analysis = state.analysis;
+  if (!analysis) return;
+
+  const t = analysis.totals;
+  const macroKcal = t.protein * 4 + t.carbs * 4 + t.fat * 9;
+  const base = macroKcal || t.kcal || 1;
+  const pPct = Math.round((t.protein * 4) / base * 100);
+  const cPct = Math.round((t.carbs * 4) / base * 100);
+  const fPct = Math.max(0, 100 - pPct - cPct);
+  const conf = Math.round(analysis.confidence * 100);
+
+  const chips = [
+    analysis.cuisine ? `<span class="chip">${esc(analysis.cuisine)}</span>` : '',
+    analysis.confidence ? `<span class="chip chip-soft">AI inamı ${conf}%</span>` : '',
+    analysis.aiRecalculated ? `<span class="chip chip-soft">AI yenilədi</span>` : '',
+  ].join('');
+
+  const ingredients = analysis.ingredients.length
+    ? analysis.ingredients.map((item, index) => ingredientRow(item, index)).join('')
+    : '<p class="empty">Tərkib yoxdur. Aşağıdan ərzaq əlavə et.</p>';
+
+  $('#resultBody').innerHTML = `
+    <div class="result-head">
+      <div class="result-title">
+        <div>${chips}</div>
+        <h2>${esc(analysis.dish)}</h2>
+        ${analysis.description ? `<p>${esc(analysis.description)}</p>` : ''}
+      </div>
+      ${analysis.thumb ? `<img class="result-thumb" src="${analysis.thumb}" alt="">` : ''}
+    </div>
+
+    <div class="result-total">
+      <div class="kcal"><strong>${fmt(t.kcal)}</strong><span>kkal</span></div>
+      <span class="muted">${t.grams ? `≈ ${fmt(t.grams)} q porsiya` : 'porsiya'}</span>
+    </div>
+
+    <div class="macros">
+      ${macroCard('Zülal', t.protein, pPct)}
+      ${macroCard('Karbohidrat', t.carbs, cPct)}
+      ${macroCard('Yağ', t.fat, fPct)}
+    </div>
+
+    <div class="ing-head">
+      <h3>Tərkibi</h3>
+      <span>qramı dəyişə bilərsən</span>
+    </div>
+    <div class="ings">${ingredients}</div>
+
+    <div class="result-tools">
+      <button class="btn btn-outline btn-sm" id="btnAddFood" type="button">＋ Ərzaq əlavə et</button>
+      <button class="btn btn-outline btn-sm" id="btnRecalc" type="button">AI ilə yenidən hesabla</button>
+    </div>
+
+    ${analysis.health ? `<div class="note">💚 ${esc(analysis.health)}</div>` : ''}
+    ${analysis.notes ? `<div class="note note-soft">${esc(analysis.notes)}</div>` : ''}
+
+    <div class="result-actions">
+      <button class="btn btn-primary" id="btnAddDiary" type="button" ${t.kcal > 0 ? '' : 'disabled'}>Gündəliyə əlavə et</button>
+      <button class="btn btn-outline" id="btnDiscard" type="button">Sil</button>
+    </div>
+    <p class="disclaimer">AI təxminidir — dəqiqlik üçün qramları düzəlt və ya AI ilə yenidən hesabla.</p>
+  `;
+}
+
+function macroCard(label, grams, percent) {
+  return `
+    <div class="macro">
+      <small>${label}</small>
+      <b>${round1(grams)}<span> q</span></b>
+      <div class="macro-bar"><i style="width:${clamp(percent, 0, 100)}%"></i></div>
+    </div>`;
+}
+
+function ingredientRow(item, index) {
+  return `
+    <div class="ing">
+      <div class="ing-main">
+        <span class="ing-name">${esc(item.name)}</span>
+        <span class="ing-macros">Z ${item.protein} · K ${item.carbs} · Y ${item.fat}</span>
+      </div>
+      <label class="grams">
+        <input type="number" inputmode="decimal" min="1" max="3000" step="5" value="${item.grams}" data-gram="${index}" aria-label="${esc(item.name)} miqdarı, qram">
+        <span>q</span>
+      </label>
+      <div class="ing-kcal">${fmt(item.kcal)}<span>kkal</span></div>
+      <button class="ing-del" type="button" data-remove-ing="${index}" aria-label="${esc(item.name)} tərkibini sil">×</button>
+    </div>`;
+}
+
+function onGramChange(event) {
+  const input = event.target.closest('[data-gram]');
+  if (!input || !state.analysis) return;
+
+  const index = Number(input.dataset.gram);
+  const item = state.analysis.ingredients[index];
+  if (!item) return;
+
+  const grams = clamp(num(input.value), 1, 3000);
+  if (!grams) {
+    input.value = item.grams;
+    return;
+  }
+
+  item.grams = Math.round(grams);
+  item.kcal = Math.round(item.perGram.kcal * item.grams);
+  item.protein = round1(item.perGram.protein * item.grams);
+  item.carbs = round1(item.perGram.carbs * item.grams);
+  item.fat = round1(item.perGram.fat * item.grams);
+
+  recomputeTotals(state.analysis);
+  renderResult();
+}
+
+function onResultClick(event) {
+  if (event.target.closest('#btnAddDiary')) {
+    addToDiary();
+  } else if (event.target.closest('#btnDiscard')) {
+    resetCapture();
+    toast('Nəticə silindi');
+  } else if (event.target.closest('#btnAddFood')) {
+    openFoodSheet();
+  } else if (event.target.closest('#btnRecalc')) {
+    recalcWithAI();
+  } else {
+    const remove = event.target.closest('[data-remove-ing]');
+    if (remove) removeIngredient(Number(remove.dataset.removeIng));
+  }
+}
+
+function removeIngredient(index) {
+  const analysis = state.analysis;
+  if (!analysis || !analysis.ingredients[index]) return;
+  analysis.ingredients.splice(index, 1);
+  analysis.aiRecalculated = false;
+  recomputeTotals(analysis);
+  renderResult();
+  toast('Tərkib silindi');
+}
+
+/* ---------------- ərzaq bazası ---------------- */
+
+const AZ_FOLD = { ə: 'e', ı: 'i', ö: 'o', ü: 'u', ç: 'c', ş: 's', ğ: 'g' };
+
+function foldText(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[əıöüçşğ]/g, (ch) => AZ_FOLD[ch] || ch);
+}
+
+function renderFoodList(query = '') {
+  const q = foldText(query.trim());
+  const items = FOOD_DB.filter((item) => !q || foldText(item.n).includes(q)).slice(0, 80);
+
+  if (!items.length) {
+    $('#foodList').innerHTML = '<div class="empty">Tapılmadı. Aşağıdan “özün yaz” ilə əlavə et.</div>';
+    return;
+  }
+
+  $('#foodList').innerHTML = items
+    .map(
+      (item, index) => `<button class="food-row" type="button" data-food-index="${FOOD_DB.indexOf(item)}">
+        <span class="food-name">${esc(item.n)}</span>
+        <span class="food-meta">${Math.round(item.k)} kkal · 100 q</span>
+      </button>`
+    )
+    .join('');
+}
+
+function openFoodSheet() {
+  if (!state.analysis) return;
+  $('#foodSheet').classList.remove('hidden');
+  document.body.classList.add('locked');
+  $('#foodSearch').value = '';
+  $('#foodCustomForm').classList.add('hidden');
+  $('#foodCustomBtn').classList.remove('hidden');
+  renderFoodList('');
+  setTimeout(() => $('#foodSearch').focus(), 150);
+}
+
+function closeFoodSheet() {
+  $('#foodSheet').classList.add('hidden');
+  document.body.classList.remove('locked');
+  $('#foodCustomForm').reset();
+  $('#foodCustomForm').classList.add('hidden');
+  $('#foodCustomBtn').classList.remove('hidden');
+}
+
+function onFoodListClick(event) {
+  const row = event.target.closest('[data-food-index]');
+  if (!row) return;
+  const item = FOOD_DB[Number(row.dataset.foodIndex)];
+  if (!item) return;
+  addFoodItem(item, 100);
+}
+
+function addFoodItem(item, grams) {
+  const analysis = state.analysis;
+  if (!analysis) return;
+
+  const g = Math.max(1, Math.round(grams || 100));
+  const kcal = (item.k * g) / 100;
+  const protein = (item.p * g) / 100;
+  const carbs = (item.c * g) / 100;
+  const fat = (item.f * g) / 100;
+
+  analysis.ingredients.push({
+    name: item.n,
+    grams: g,
+    kcal: Math.round(kcal),
+    protein: round1(protein),
+    carbs: round1(carbs),
+    fat: round1(fat),
+    perGram: { kcal: item.k / 100, protein: item.p / 100, carbs: item.c / 100, fat: item.f / 100 },
+  });
+  analysis.aiRecalculated = false;
+
+  recomputeTotals(analysis);
+  renderResult();
+  closeFoodSheet();
+  toast(`${item.n} əlavə olundu (${g} q)`);
+}
+
+function toggleCustomFood() {
+  $('#foodCustomBtn').classList.add('hidden');
+  $('#foodCustomForm').classList.remove('hidden');
+  $('#fcName').focus();
+}
+
+function onCustomFoodSubmit(event) {
+  event.preventDefault();
+  const name = $('#fcName').value.trim();
+  const kcal = num($('#fcKcal').value);
+  if (!name) {
+    toast('Ərzağın adını yaz');
+    return;
+  }
+  if (kcal <= 0) {
+    toast('100 q üçün kalori yaz');
+    return;
+  }
+
+  addFoodItem(
+    {
+      n: name,
+      k: kcal,
+      p: Math.max(0, num($('#fcProtein').value)),
+      c: Math.max(0, num($('#fcCarbs').value)),
+      f: Math.max(0, num($('#fcFat').value)),
+    },
+    100
+  );
+}
+
+/* ---------------- AI ilə yenidən hesablama ---------------- */
+
+async function recalcWithAI() {
+  const analysis = state.analysis;
+  if (!analysis) return;
+  if (!analysis.ingredients.length) {
+    toast('Əvvəlcə ərzaq əlavə et');
+    return;
+  }
+
+  const button = $('#btnRecalc');
+  if (button) {
+    button.disabled = true;
+    button.textContent = 'Hesablanır…';
+  }
+
+  try {
+    const lines = analysis.ingredients.map((item, index) => `${index + 1}. ${item.name} — ${item.grams} q`).join('\n');
+    const prompt = `Sən qida dəyəri hesablayan köməkçisən.
+
+Yemək: ${analysis.dish}
+Tərkib:
+${lines}
+
+Bu tərkib üçün hər məhsulun kalorisini, zülalını, karbohidratını və yağını hesabla.
+
+Qaydalar:
+- Adları, qramları və sıranı dəyişmə.
+- Hər məhsul üçün göstərilən qram miqdarına uyğun dəyər ver.
+- 4 kkal/q zülal, 4 kkal/q karbohidrat, 9 kkal/q yağ istifadə et.
+- Azərbaycan dilində yalnız JSON qaytar.`;
+
+    const raw = await geminiRequest([{ text: prompt }], RECALC_SCHEMA, state.settings);
+    applyRecalc(raw);
+    toast('AI yenidən hesabladı');
+  } catch (err) {
+    console.error(err);
+    toast(err instanceof AppError ? err.message : 'Yenidən hesablama alınmadı');
+  } finally {
+    if (state.analysis) renderResult();
+  }
+}
+
+function applyRecalc(raw) {
+  const analysis = state.analysis;
+  if (!analysis) return;
+  const list = Array.isArray(raw && raw.ingredients) ? raw.ingredients : [];
+
+  analysis.ingredients.forEach((item, index) => {
+    const byIndex = list[index];
+    const byName = list.find((x) => foldText(x.name) === foldText(item.name));
+    const src = byIndex && foldText(byIndex.name) === foldText(item.name) ? byIndex : byName || byIndex;
+    if (!src) return;
+
+    const grams = item.grams;
+    const protein = Math.max(0, num(src.protein));
+    const carbs = Math.max(0, num(src.carbs));
+    const fat = Math.max(0, num(src.fat));
+    let kcal = Math.max(0, num(src.kcal));
+    if (!kcal && (protein || carbs || fat)) kcal = protein * 4 + carbs * 4 + fat * 9;
+
+    item.protein = round1(protein);
+    item.carbs = round1(carbs);
+    item.fat = round1(fat);
+    item.kcal = Math.round(kcal);
+    item.perGram = {
+      kcal: kcal / grams,
+      protein: protein / grams,
+      carbs: carbs / grams,
+      fat: fat / grams,
+    };
+  });
+
+  analysis.aiRecalculated = true;
+  recomputeTotals(analysis);
+}
+
+function addToDiary() {
+  const analysis = state.analysis;
+  if (!analysis) return;
+
+  const entry = {
+    id: uid(),
+    ts: Date.now(),
+    date: dateKey(),
+    dish: analysis.dish,
+    description: analysis.description,
+    confidence: analysis.confidence,
+    thumb: (state.pending && state.pending.thumb) || '',
+    ingredients: analysis.ingredients.map((item) => ({
+      name: item.name,
+      grams: item.grams,
+      kcal: item.kcal,
+      protein: item.protein,
+      carbs: item.carbs,
+      fat: item.fat,
+    })),
+    totals: { ...analysis.totals },
+  };
+
+  state.entries.push(entry);
+  writeJSON(LS.entries, state.entries);
+
+  resetCapture();
+  renderDiary();
+  renderHomeSummary();
+  setTab('diary');
+  toast('Gündəliyə əlavə olundu');
+}
+
+function loadSample() {
+  state.pending = { dataUrl: '', thumb: '' };
+  state.analysis = normalizeAnalysis(SAMPLE);
+  state.analysis.thumb = '';
+  renderResult();
+  $('#analyzeCard').classList.add('hidden');
+  $('#errorCard').classList.add('hidden');
+  $('#loadingCard').classList.add('hidden');
+  $('#resultCard').classList.remove('hidden');
+  $('#resultCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  toast('Bu, nümunə nəticədir');
+}
+
+/* ---------------- home summary ---------------- */
+
+function sumTotals(entries) {
+  const total = { kcal: 0, protein: 0, carbs: 0, fat: 0, grams: 0 };
+  for (const entry of entries) {
+    const t = entry.totals || {};
+    total.kcal += num(t.kcal);
+    total.protein += num(t.protein);
+    total.carbs += num(t.carbs);
+    total.fat += num(t.fat);
+    total.grams += num(t.grams);
+  }
+  total.kcal = Math.round(total.kcal);
+  total.protein = round1(total.protein);
+  total.carbs = round1(total.carbs);
+  total.fat = round1(total.fat);
+  total.grams = Math.round(total.grams);
+  return total;
+}
+
+function ringSVG(size, stroke, progress, id) {
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const filled = circumference * clamp(progress, 0, 1);
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" aria-hidden="true">
+    <defs>
+      <linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#BEF264"></stop>
+        <stop offset="1" stop-color="#16A34A"></stop>
+      </linearGradient>
+    </defs>
+    <circle cx="${size / 2}" cy="${size / 2}" r="${radius}" fill="none" stroke="var(--line)" stroke-width="${stroke}"></circle>
+    <circle cx="${size / 2}" cy="${size / 2}" r="${radius}" fill="none" stroke="url(#${id})" stroke-width="${stroke}" stroke-linecap="${progress > 0 ? 'round' : 'butt'}"
+      stroke-dasharray="${filled} ${circumference}" transform="rotate(-90 ${size / 2} ${size / 2})"></circle>
+  </svg>`;
+}
+
+function renderHomeSummary() {
+  const today = state.entries.filter((entry) => entry.date === dateKey());
+  const totals = sumTotals(today);
+  const goal = state.settings.goal;
+  const pct = clamp(totals.kcal / goal, 0, 1);
+  const remaining = goal - totals.kcal;
+
+  $('#homeSummary').innerHTML = `
+    <div>
+      <span class="label">Bugün</span>
+      <div class="sum-kcal">
+        <strong>${fmt(totals.kcal)}</strong>
+        <span>/ ${fmt(goal)} kkal</span>
+      </div>
+      <div class="sum-macros">Z ${totals.protein} · K ${totals.carbs} · Y ${totals.fat}</div>
+      <button class="link-btn" type="button" data-tab="diary" style="margin-top:8px">
+        ${remaining >= 0 ? `${fmt(remaining)} kkal qalıb` : `${fmt(Math.abs(remaining))} kkal artıq`} →
+      </button>
+    </div>
+    <div class="ring-wrap">
+      ${ringSVG(88, 9, pct, 'ringHome')}
+      <div class="ring-label"><strong>${Math.round(pct * 100)}%</strong><span>hədəf</span></div>
+    </div>`;
+}
+
+function renderAiStatus() {
+  const el = $('#aiStatus');
+  if (!el) return;
+  if (CONFIG.geminiApiKey) {
+    el.className = 'status-btn ok';
+    el.textContent = 'Google Gemini hazır';
+  } else {
+    el.className = 'status-btn';
+    el.textContent = 'AI konfiqurasiyası yoxdur';
+  }
+}
+
+/* ---------------- diary ---------------- */
+
+function selectedDate() {
+  return state.selectedDate || dateKey();
+}
+
+function selectDate(key) {
+  if (!key || key > dateKey()) return;
+  state.selectedDate = key;
+  renderDiary();
+}
+
+function shiftDay(delta) {
+  const d = new Date(`${selectedDate()}T12:00:00`);
+  d.setDate(d.getDate() + delta);
+  selectDate(dateKey(d));
+}
+
+function renderDiary() {
+  const key = selectedDate();
+  const dayEntries = state.entries.filter((entry) => entry.date === key).sort((a, b) => b.ts - a.ts);
+  const totals = sumTotals(dayEntries);
+  const goal = state.settings.goal;
+  const pct = clamp(totals.kcal / goal, 0, 1);
+  const remaining = goal - totals.kcal;
+  const over = remaining < 0;
+  const isToday = key === dateKey();
+
+  $('#dayTitle').textContent = dayLabel(key);
+  $('#daySub').textContent = shortDate(key);
+  $('#dayNext').disabled = key >= dateKey();
+  $('#btnToday').classList.toggle('hidden', isToday);
+
+  $('#diaryRing').innerHTML = `
+    <div class="ring-big">
+      ${ringSVG(148, 13, pct, 'ringDiary')}
+      <div class="ring-center"><strong>${fmt(totals.kcal)}</strong><span>/ ${fmt(goal)} kkal</span></div>
+    </div>
+    <div class="ring-stats">
+      <div class="stat"><span>${over ? 'Artıq' : 'Qalan'}</span>
+        <b style="color:${over ? 'var(--danger)' : 'var(--brand)'}">${fmt(Math.abs(remaining))} kkal</b>
+      </div>
+      <div class="stat"><span>Zülal</span><b>${totals.protein} q</b></div>
+      <div class="stat"><span>Karbohidrat</span><b>${totals.carbs} q</b></div>
+      <div class="stat"><span>Yağ</span><b>${totals.fat} q</b></div>
+    </div>`;
+
+  renderWeek();
+  renderDayEntries(dayEntries, key);
+  renderDaysList();
+}
+
+function renderWeek() {
+  const goal = state.settings.goal;
+  const selected = selectedDate();
+  const days = [];
+
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setHours(12, 0, 0, 0);
+    d.setDate(d.getDate() - i);
+    const key = dateKey(d);
+    days.push({
+      d,
+      key,
+      kcal: sumTotals(state.entries.filter((entry) => entry.date === key)).kcal,
+    });
+  }
+
+  const max = Math.max(goal, ...days.map((day) => day.kcal), 1);
+  const total = days.reduce((sum, day) => sum + day.kcal, 0);
+  $('#weekMeta').textContent = `7 gündə ${fmt(total)} kkal`;
+
+  $('#weekChart').innerHTML = days
+    .map((day) => {
+      const height = day.kcal ? Math.max(4, Math.round((day.kcal / max) * 100)) : 0;
+      const isSelected = day.key === selected;
+      return `<button class="bar-col ${isSelected ? 'selected' : ''}" type="button" data-day="${day.key}" aria-label="${shortDate(day.key)}: ${fmt(day.kcal)} kkal">
+        <div class="bar-track">
+          <div class="bar ${day.kcal ? '' : 'empty'} ${day.key === dateKey() ? 'today' : ''}" style="height:${height}%"></div>
+        </div>
+        <span class="bar-label">${WD[day.d.getDay()]}</span>
+      </button>`;
+    })
+    .join('');
+}
+
+function renderDayEntries(entries, key) {
+  const isToday = key === dateKey();
+  $('#todayCard').innerHTML = `
+    <div class="card-head">
+      <h3>${isToday ? 'Bugünkü yeməklər' : `${esc(dayLabel(key))} — yeməklər`}</h3>
+      <span class="muted">${entries.length} qeyd</span>
+    </div>
+    ${
+      entries.length
+        ? entries.map(entryRow).join('')
+        : `<div class="empty">Bu gün üçün qeyd yoxdur.${
+            isToday ? '<br>Şəkil çək və ya “+ Əl ilə” əlavə et.' : ''
+          }</div>`
+    }`;
+}
+
+function renderDaysList() {
+  const groups = groupByDate(state.entries).slice(0, 60);
+  const card = $('#daysCard');
+
+  if (!groups.length) {
+    card.classList.add('hidden');
+    card.innerHTML = '';
+    return;
+  }
+
+  card.classList.remove('hidden');
+  const selected = selectedDate();
+  card.innerHTML = `
+    <div class="card-head">
+      <h3>Günlər</h3>
+      <span class="muted">${groups.length} gün</span>
+    </div>
+    ${groups
+      .map(([key, items]) => {
+        const total = sumTotals(items);
+        return `<button class="day-row ${key === selected ? 'active' : ''}" type="button" data-day="${key}">
+          <span class="day-row-main">
+            <b>${esc(dayLabel(key))}</b>
+            <small>${esc(shortDate(key))}</small>
+          </span>
+          <span class="day-row-kcal">${fmt(total.kcal)} kkal<small>${items.length} qeyd</small></span>
+        </button>`;
+      })
+      .join('')}`;
+}
+
+function groupByDate(entries) {
+  const map = new Map();
+  for (const entry of entries) {
+    const key = entry.date || dateKey(new Date(entry.ts || Date.now()));
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(entry);
+  }
+  return Array.from(map.entries()).sort((a, b) => b[0].localeCompare(a[0]));
+}
+
+function dayLabel(key) {
+  const today = dateKey();
+  const yesterday = dateKey(new Date(Date.now() - 86400000));
+  if (key === today) return 'Bugün';
+  if (key === yesterday) return 'Dünən';
+  const d = new Date(`${key}T12:00:00`);
+  if (isNaN(d.getTime())) return key;
+  return `${d.getDate()} ${AZ_MONTHS[d.getMonth()]}`;
+}
+
+function shortDate(key) {
+  const d = new Date(`${key}T12:00:00`);
+  if (isNaN(d.getTime())) return key;
+  const sameYear = d.getFullYear() === new Date().getFullYear();
+  return `${d.getDate()} ${AZ_MONTHS[d.getMonth()]}${sameYear ? '' : ` ${d.getFullYear()}`}, ${AZ_WEEKDAYS[d.getDay()]}`;
+}
+
+function entryRow(entry) {
+  const totals = entry.totals || {};
+  const grams = num(totals.grams);
+  const parts = [];
+  const time = formatTime(entry.ts);
+  if (time) parts.push(time);
+  if (grams) parts.push(`${fmt(grams)} q`);
+  if (entry.manual) parts.push('əl ilə');
+  const expanded = state.expanded.has(entry.id);
+
+  return `<div class="entry-wrap">
+    <div class="entry">
+      ${
+        entry.thumb
+          ? `<img src="${entry.thumb}" alt="">`
+          : `<div class="entry-ph" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8"></circle><circle cx="12" cy="12" r="3.4"></circle></svg></div>`
+      }
+      <div class="entry-main" data-expand="${esc(entry.id)}" role="button" tabindex="0" aria-expanded="${expanded}">
+        <div class="entry-body">
+          <div class="entry-name">${esc(entry.dish || 'Yemək')}</div>
+          <div class="entry-meta">${esc(parts.join(' · '))}</div>
+        </div>
+        <div class="entry-kcal">${fmt(totals.kcal)}<span>kkal</span></div>
+      </div>
+      <button class="entry-del" type="button" data-del="${esc(entry.id)}" aria-label="Qeydi sil">×</button>
+    </div>
+    ${expanded ? entryDetail(entry) : ''}
+  </div>`;
+}
+
+function entryDetail(entry) {
+  const items = Array.isArray(entry.ingredients) ? entry.ingredients : [];
+  const totals = entry.totals || {};
+  const list = items.length
+    ? `<ul class="entry-ings">${items
+        .map(
+          (item) =>
+            `<li><span>${esc(item.name)}</span><span>${fmt(item.grams)} q</span><span>${fmt(item.kcal)} kkal</span></li>`
+        )
+        .join('')}</ul>`
+    : '<p class="muted">Tərkib qeyd edilməyib.</p>';
+
+  return `<div class="entry-detail">
+    ${list}
+    <div class="entry-macros">Z ${round1(totals.protein)} · K ${round1(totals.carbs)} · Y ${round1(totals.fat)}</div>
+  </div>`;
+}
+
+function toggleEntryDetails(id) {
+  if (state.expanded.has(id)) state.expanded.delete(id);
+  else state.expanded.add(id);
+  renderDiary();
+}
+
+function formatTime(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  if (isNaN(d.getTime())) return '';
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+function removeEntry(id) {
+  const entry = state.entries.find((item) => item.id === id);
+  if (!entry) return;
+  if (!confirm(`“${entry.dish}” qeydi silinsin?`)) return;
+
+  state.entries = state.entries.filter((item) => item.id !== id);
+  state.expanded.delete(id);
+  writeJSON(LS.entries, state.entries);
+  renderDiary();
+  renderHomeSummary();
+  toast('Qeyd silindi');
+}
+
+/* ---------------- manual entry ---------------- */
+
+function onManualSubmit(event) {
+  event.preventDefault();
+
+  const dish = $('#mName').value.trim();
+  const kcal = Math.round(num($('#mKcal').value));
+  if (!dish) {
+    toast('Yeməyin adını yaz');
+    return;
+  }
+  if (kcal <= 0) {
+    toast('Kalori dəyərini yaz');
+    return;
+  }
+
+  const entry = {
+    id: uid(),
+    ts: Date.now(),
+    date: dateKey(),
+    dish,
+    manual: true,
+    thumb: '',
+    ingredients: [],
+    totals: {
+      kcal,
+      protein: Math.max(0, round1(num($('#mProtein').value))),
+      carbs: Math.max(0, round1(num($('#mCarbs').value))),
+      fat: Math.max(0, round1(num($('#mFat').value))),
+      grams: 0,
+    },
+  };
+
+  state.entries.push(entry);
+  writeJSON(LS.entries, state.entries);
+
+  $('#manualForm').reset();
+  $('#manualCard').classList.add('hidden');
+  renderDiary();
+  renderHomeSummary();
+  toast('Əlavə olundu');
+}
+
+/* ---------------- settings ---------------- */
+
+function fillSettings() {
+  const s = state.settings;
+  $('#setGoal').value = s.goal;
+  $('#setModel').value = s.model;
+  $('#modelSelectWrap').classList.add('hidden');
+  $('#modelStatus').textContent = '';
+  applyTheme(s.theme);
+}
+
+function onThemeChoice(event) {
+  const btn = event.target.closest('[data-theme-opt]');
+  if (!btn) return;
+  const theme = btn.dataset.themeOpt;
+  if (!['auto', 'light', 'dark'].includes(theme)) return;
+  state.settings.theme = theme;
+  writeJSON(LS.settings, state.settings);
+  applyTheme(theme);
+}
+
+function applyTheme(theme) {
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const dark = theme === 'dark' || (theme !== 'light' && prefersDark);
+
+  if (theme === 'auto') document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.dataset.theme = theme;
+
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', dark ? '#070b0a' : '#f2f5f3');
+
+  $$('#themeSwitch [data-theme-opt]').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.themeOpt === theme);
+  });
+}
+
+function bindSystemTheme() {
+  const query = window.matchMedia('(prefers-color-scheme: dark)');
+  const handler = () => {
+    if (state.settings.theme === 'auto') applyTheme('auto');
+  };
+  if (query.addEventListener) query.addEventListener('change', handler);
+  else if (query.addListener) query.addListener(handler);
+}
+
+async function loadGeminiModels() {
+  const key = CONFIG.geminiApiKey;
+  if (!key) {
+    toast('AI konfiqurasiyası tapılmadı');
+    return;
+  }
+
+  const button = $('#btnFetchModels');
+  const status = $('#modelStatus');
+  button.disabled = true;
+  status.textContent = 'Gətirilir…';
+
+  try {
+    const res = await request(
+      `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}&pageSize=1000`,
+      { method: 'GET' },
+      25000
+    );
+    if (!res.ok) throw await apiError(res);
+    const data = await res.json();
+
+    const blocked = ['tts', 'image', 'lyria', 'robotics', 'computer-use', 'deep-research', 'antigravity', 'transcribe', 'nano-banana'];
+    const models = (data.models || [])
+      .filter((model) => (model.supportedGenerationMethods || []).includes('generateContent'))
+      .map((model) => ({
+        id: String(model.name || '').replace('models/', ''),
+        label: String(model.displayName || model.name || ''),
+      }))
+      .filter(
+        (model) => model.id && !blocked.some((word) => `${model.id} ${model.label}`.toLowerCase().includes(word))
+      )
+      .sort((a, b) => {
+        const ai = GEMINI_FALLBACKS.indexOf(a.id);
+        const bi = GEMINI_FALLBACKS.indexOf(b.id);
+        if (ai !== -1 || bi !== -1) return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+        return a.id.localeCompare(b.id);
+      });
+
+    if (!models.length) throw new AppError('Bu açar üçün uyğun model tapılmadı.');
+
+    const select = $('#modelSelect');
+    select.innerHTML = models
+      .map((model) => `<option value="${esc(model.id)}">${esc(model.label)} — ${esc(model.id)}</option>`)
+      .join('');
+
+    const current = $('#setModel').value.trim();
+    if (models.some((model) => model.id === current)) select.value = current;
+
+    select.onchange = () => {
+      $('#setModel').value = select.value;
+      status.textContent = 'Model seçildi — Yadda saxla';
+    };
+
+    $('#modelSelectWrap').classList.remove('hidden');
+    status.textContent = `${models.length} model tapıldı`;
+  } catch (err) {
+    console.error(err);
+    status.textContent = '';
+    toast(err instanceof AppError ? err.message : 'Modelləri gətirmək alınmadı');
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function onSaveSettings(event) {
+  event.preventDefault();
+
+  const goal = clamp(Math.round(num($('#setGoal').value) || 2000), 800, 8000);
+  const model = $('#setModel').value.trim() || AI.model;
+
+  state.settings.goal = goal;
+  state.settings.model = model;
+  writeJSON(LS.settings, state.settings);
+
+  renderHomeSummary();
+  renderDiary();
+  toast('Ayarlar saxlanıldı');
+}
+
+function wipeData() {
+  if (!confirm('Bütün qeydlər və ayarlar silinsin?')) return;
+  [LS.settings, LS.entries, LS.iosHint].forEach((key) => localStorage.removeItem(key));
+  location.reload();
+}
+
+/* ---------------- iOS hint & SW ---------------- */
+
+function maybeShowIosHint() {
+  const ua = navigator.userAgent || '';
+  const isIOS = /iPhone|iPad|iPod/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const standalone =
+    window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+  if (isIOS && !standalone && !localStorage.getItem(LS.iosHint)) {
+    $('#iosHint').classList.remove('hidden');
+  }
+}
+
+function dismissIosHint() {
+  try {
+    localStorage.setItem(LS.iosHint, '1');
+  } catch {
+    /* ignore */
+  }
+  $('#iosHint').classList.add('hidden');
+}
+
+function registerSW() {
+  if (!('serviceWorker' in navigator)) return;
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch((err) => console.warn('SW qeydiyyatı:', err));
+  });
+}
