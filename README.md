@@ -13,6 +13,7 @@ Backend yoxdur — tətbiq statik fayllardan ibarətdir və birbaşa Google Gemi
 - **Tərkibi əl ilə düzəlt** — hər məhsulun qramını dəyiş, lazımsızunu sil. `＋ Ərzaq əlavə et` ilə 100-dən çox məhsulluq **axtarışlı siyahı**dan seç və ya siyahıda olmayanı özün yaz (100 q üçün kalori və makrolar).
 - **AI ilə yenidən hesabla** — tərkib dəyişdikdən sonra düyməni bas; AI bütün qramları nəzərə alıb kalori və makroları yenidən hesablayır.
 - **Gündəlik** — gün seçimi: `‹ ›` düymələri, son 7 günün qrafiki (sütuna toxun) və “Günlər” siyahısı. Seçilmiş günün kalorisi, makroları və yeməkləri görünür; yeməyə toxunanda tərkibi açılır.
+- **Yeməyi redaktə et** — gündəlikdəki hər yeməyin yanındaki **qələm** ikonu ilə adı, qramları və tərkibi dəyiş, ərzaq əlavə et, AI ilə yenidən hesabla və **Yadda saxla**.
 - **Tema** — Avtomatik (telefonun rejiminə görə), Açıq, Tünd.
 - **Ayarlar** — gündəlik hədəf, AI modeli, mövcud modellərin siyahısı.
 - **Offline app shell** — service worker interfeysi keşləyir; internet yalnız AI sorğusu üçün lazımdır.
@@ -37,7 +38,7 @@ PWA-nın telefonda quraşdırılması və kamerasının işləməsi üçün **HT
 
 **GitHub Pages ilə:** repo yaradın → zip-i kompüterdə açın → içindəki faylları repo **kökünə** yükləyin (`icons/` qovluğu da daxil) → **Settings → Pages → Deploy from a branch → `main` / `(root)`**. Link: `https://istifadəçi.github.io/repo/`.
 
-> Faylları dəyişdikdən sonra yenidən yükləyin. Service worker `v1.1.1` keşi avtomatik yeniləyir; ilk açılışda səhifəni iki dəfə yeniləmək lazım ola bilər.
+> Faylları dəyişdikdən sonra yenidən yükləyin. Service worker `v1.2.0` keşi avtomatik yeniləyir; ilk açılışda səhifəni iki dəfə yeniləmək lazım ola bilər.
 
 ## AI açarı
 
@@ -64,6 +65,14 @@ Ayarlar → **Görünüş**:
 3. Həmin günün kalorisi, zülal/karbohidrat/yağ göstəriciləri və yeməkləri görünür.
 4. Yeməyə toxunanda tərkibi (ad, qram, kalori) açılır.
 5. “Bugünə qayıt” ilə geri dönün.
+
+## Yeməyi redaktə etmək
+
+1. **Gündəlik**-də istədiyin günə keç.
+2. Yeməyin sağındaki **qələm (✎)** ikonuna toxun — redaktə ekranı açılır.
+3. Adı dəyiş, qramları düzəlt, **＋ Ərzaq əlavə et** ilə tərkib əlavə et və ya **×** ilə sil, istəsən **AI ilə yenidən hesabla**.
+4. **Yadda saxla** — dəyişikliklər həmin günün qeydinə yazılır və gündəlik yenilənir.
+5. **Ləğv et** — heç nə dəyişmir. Keçmiş günü redaktə etsən, yadda saxladıqdan sonra yenə həmin günə qayıdırsan.
 
 ## Təhlükəsizlik və məxfilik
 
@@ -100,6 +109,7 @@ Testlər Chrome/Edge-i `--remote-debugging-port=9344` ilə başladıb CDP üzər
 ```bash
 node tools/shot.mjs          # iPhone ölçüsündə ekran görüntüləri + tüstü testləri
 node tools/ui-test.mjs       # tema, ərzaq axtarışı/əlavə/silmə, AI recalc, gün seçimi
+node tools/edit-test.mjs     # gündəlikdə yemək redaktəsi (ad, qram, tərkib, yadda saxla)
 node tools/api-test.mjs      # Gemini sorğularını mock cavablarla yoxlayır
 node tools/offline-test.mjs  # service worker və oflayn rejim
 ```

@@ -881,6 +881,26 @@ p {
   color: var(--muted);
 }
 
+.dish-input {
+  display: block;
+  width: 100%;
+  margin: 9px 0 5px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--soft);
+  color: var(--ink);
+  font: inherit;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+
+.dish-input:focus {
+  border-color: var(--brand);
+  outline: none;
+}
+
 .result-actions {
   display: flex;
   gap: 10px;
@@ -1243,6 +1263,28 @@ p {
   color: var(--muted);
   font-size: 18px;
   line-height: 1;
+}
+
+.entry-edit {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  color: var(--muted);
+}
+
+.entry-edit svg {
+  width: 16px;
+  height: 16px;
+}
+
+.entry-edit:active {
+  background: var(--brand-soft);
+  color: var(--brand);
 }
 
 .entry-del:active {

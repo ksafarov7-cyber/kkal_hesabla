@@ -158,6 +158,7 @@ const state = {
   tab: 'home',
   pending: null,
   analysis: null,
+  editing: null,
   busy: false,
   settings: { ...DEFAULT_SETTINGS },
   entries: [],
@@ -361,6 +362,13 @@ function onGlobalClick(event) {
     return;
   }
 
+  const edit = event.target.closest('[data-edit]');
+  if (edit) {
+    event.stopPropagation();
+    editEntry(edit.dataset.edit);
+    return;
+  }
+
   const dayBtn = event.target.closest('[data-day]');
   if (dayBtn) {
     selectDate(dayBtn.dataset.day);
@@ -472,6 +480,8 @@ function drawScaled(source) {
 function resetCapture() {
   state.pending = null;
   state.analysis = null;
+  state.editing = null;
+  $('#resultBody').innerHTML = '';
   $('#previewImg').removeAttribute('src');
   $('#analyzeCard').classList.add('hidden');
   $('#resultCard').classList.add('hidden');
@@ -496,6 +506,7 @@ async function analyze() {
   }
 
   state.busy = true;
+  state.editing = null;
   $('#btnAnalyze').disabled = true;
   $('#analyzeCard').classList.add('hidden');
   $('#resultCard').classList.add('hidden');
@@ -820,6 +831,11 @@ function renderResult() {
   const analysis = state.analysis;
   if (!analysis) return;
 
+  if (state.editing) {
+    const currentName = $('#editDish');
+    if (currentName) analysis.dish = currentName.value;
+  }
+
   const t = analysis.totals;
   const macroKcal = t.protein * 4 + t.carbs * 4 + t.fat * 9;
   const base = macroKcal || t.kcal || 1;
@@ -827,8 +843,10 @@ function renderResult() {
   const cPct = Math.round((t.carbs * 4) / base * 100);
   const fPct = Math.max(0, 100 - pPct - cPct);
   const conf = Math.round(analysis.confidence * 100);
+  const editing = Boolean(state.editing);
 
   const chips = [
+    editing ? '<span class="chip">Redaktə</span>' : '',
     analysis.cuisine ? `<span class="chip">${esc(analysis.cuisine)}</span>` : '',
     analysis.confidence ? `<span class="chip chip-soft">AI inamı ${conf}%</span>` : '',
     analysis.aiRecalculated ? `<span class="chip chip-soft">AI yenilədi</span>` : '',
@@ -842,7 +860,11 @@ function renderResult() {
     <div class="result-head">
       <div class="result-title">
         <div>${chips}</div>
-        <h2>${esc(analysis.dish)}</h2>
+        ${
+          editing
+            ? `<input class="dish-input" id="editDish" type="text" maxlength="80" value="${esc(analysis.dish)}" aria-label="Yeməyin adı">`
+            : `<h2>${esc(analysis.dish)}</h2>`
+        }
         ${analysis.description ? `<p>${esc(analysis.description)}</p>` : ''}
       </div>
       ${analysis.thumb ? `<img class="result-thumb" src="${analysis.thumb}" alt="">` : ''}
@@ -874,10 +896,19 @@ function renderResult() {
     ${analysis.notes ? `<div class="note note-soft">${esc(analysis.notes)}</div>` : ''}
 
     <div class="result-actions">
-      <button class="btn btn-primary" id="btnAddDiary" type="button" ${t.kcal > 0 ? '' : 'disabled'}>Gündəliyə əlavə et</button>
-      <button class="btn btn-outline" id="btnDiscard" type="button">Sil</button>
+      ${
+        editing
+          ? `<button class="btn btn-primary" id="btnSaveEdit" type="button">Yadda saxla</button>
+             <button class="btn btn-outline" id="btnCancelEdit" type="button">Ləğv et</button>`
+          : `<button class="btn btn-primary" id="btnAddDiary" type="button" ${t.kcal > 0 ? '' : 'disabled'}>Gündəliyə əlavə et</button>
+             <button class="btn btn-outline" id="btnDiscard" type="button">Sil</button>`
+      }
     </div>
-    <p class="disclaimer">AI təxminidir — dəqiqlik üçün qramları düzəlt və ya AI ilə yenidən hesabla.</p>
+    <p class="disclaimer">${
+      editing
+        ? 'Dəyişiklikləri etdikdən sonra “Yadda saxla”nı bas.'
+        : 'AI təxminidir — dəqiqlik üçün qramları düzəlt və ya AI ilə yenidən hesabla.'
+    }</p>
   `;
 }
 
@@ -931,6 +962,14 @@ function onGramChange(event) {
 }
 
 function onResultClick(event) {
+  if (event.target.closest('#btnSaveEdit')) {
+    saveEntryEdit();
+    return;
+  }
+  if (event.target.closest('#btnCancelEdit')) {
+    cancelEntryEdit();
+    return;
+  }
   if (event.target.closest('#btnAddDiary')) {
     addToDiary();
   } else if (event.target.closest('#btnDiscard')) {
@@ -944,6 +983,115 @@ function onResultClick(event) {
     const remove = event.target.closest('[data-remove-ing]');
     if (remove) removeIngredient(Number(remove.dataset.removeIng));
   }
+}
+
+function editEntry(id) {
+  const entry = state.entries.find((item) => item.id === id);
+  if (!entry) return;
+
+  const ingredients = (Array.isArray(entry.ingredients) ? entry.ingredients : []).map((item) => {
+    const grams = Math.max(1, Math.round(num(item.grams)));
+    const kcal = Math.max(0, num(item.kcal));
+    const protein = Math.max(0, num(item.protein));
+    const carbs = Math.max(0, num(item.carbs));
+    const fat = Math.max(0, num(item.fat));
+    return {
+      name: String(item.name || 'Tərkib'),
+      grams,
+      kcal: Math.round(kcal),
+      protein: round1(protein),
+      carbs: round1(carbs),
+      fat: round1(fat),
+      perGram: {
+        kcal: kcal / grams,
+        protein: protein / grams,
+        carbs: carbs / grams,
+        fat: fat / grams,
+      },
+    };
+  });
+
+  const totals = {
+    kcal: Math.max(0, Math.round(num(entry.totals?.kcal))),
+    protein: Math.max(0, round1(num(entry.totals?.protein))),
+    carbs: Math.max(0, round1(num(entry.totals?.carbs))),
+    fat: Math.max(0, round1(num(entry.totals?.fat))),
+    fiber: Math.max(0, round1(num(entry.totals?.fiber))),
+    grams: Math.max(0, Math.round(num(entry.totals?.grams))),
+  };
+
+  const analysis = {
+    dish: entry.dish || 'Yemək',
+    description: entry.description || '',
+    cuisine: '',
+    confidence: entry.confidence || 0,
+    notes: '',
+    health: '',
+    ingredients,
+    totals,
+    thumb: entry.thumb || '',
+  };
+  if (ingredients.length) recomputeTotals(analysis);
+
+  state.analysis = analysis;
+  state.editing = entry.id;
+  state.pending = { dataUrl: '', thumb: entry.thumb || '' };
+  $('#resultBody').innerHTML = '';
+
+  setTab('home');
+  $('#analyzeCard').classList.add('hidden');
+  $('#loadingCard').classList.add('hidden');
+  $('#errorCard').classList.add('hidden');
+  $('#resultCard').classList.remove('hidden');
+  renderResult();
+  window.setTimeout(() => {
+    $('#resultCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 60);
+}
+
+function saveEntryEdit() {
+  const entry = state.entries.find((item) => item.id === state.editing);
+  const analysis = state.analysis;
+  if (!entry || !analysis) return;
+
+  const dish = ($('#editDish') ? $('#editDish').value : analysis.dish).trim();
+  if (!dish) {
+    toast('Yeməyin adını yaz');
+    return;
+  }
+  if (!analysis.ingredients.length && analysis.totals.kcal <= 0) {
+    toast('Ərzaq əlavə et və ya kalori daxil et');
+    return;
+  }
+
+  entry.dish = dish;
+  entry.ingredients = analysis.ingredients.map((item) => ({
+    name: item.name,
+    grams: item.grams,
+    kcal: item.kcal,
+    protein: item.protein,
+    carbs: item.carbs,
+    fat: item.fat,
+  }));
+  entry.totals = { ...analysis.totals };
+  entry.thumb = analysis.thumb || entry.thumb || '';
+  entry.manual = Boolean(entry.manual && !analysis.ingredients.length);
+  entry.editedAt = Date.now();
+
+  writeJSON(LS.entries, state.entries);
+
+  resetCapture();
+  renderDiary();
+  renderHomeSummary();
+  setTab('diary');
+  toast('Yemək yeniləndi');
+}
+
+function cancelEntryEdit() {
+  resetCapture();
+  renderDiary();
+  setTab('diary');
+  toast('Redaktə ləğv edildi');
 }
 
 function removeIngredient(index) {
@@ -1087,6 +1235,9 @@ async function recalcWithAI() {
   }
 
   try {
+    const nameInput = $('#editDish');
+    if (nameInput && nameInput.value.trim()) analysis.dish = nameInput.value.trim();
+
     const lines = analysis.ingredients.map((item, index) => `${index + 1}. ${item.name} — ${item.grams} q`).join('\n');
     const prompt = `Sən qida dəyəri hesablayan köməkçisən.
 
@@ -1184,6 +1335,7 @@ function loadSample() {
   state.pending = { dataUrl: '', thumb: '' };
   state.analysis = normalizeAnalysis(SAMPLE);
   state.analysis.thumb = '';
+  state.editing = null;
   renderResult();
   $('#analyzeCard').classList.add('hidden');
   $('#errorCard').classList.add('hidden');
@@ -1452,6 +1604,12 @@ function entryRow(entry) {
         </div>
         <div class="entry-kcal">${fmt(totals.kcal)}<span>kkal</span></div>
       </div>
+      <button class="entry-edit" type="button" data-edit="${esc(entry.id)}" aria-label="Yeməyi redaktə et">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 20h9"></path>
+          <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"></path>
+        </svg>
+      </button>
       <button class="entry-del" type="button" data-del="${esc(entry.id)}" aria-label="Qeydi sil">×</button>
     </div>
     ${expanded ? entryDetail(entry) : ''}
