@@ -1,6 +1,6 @@
 /* Kalori AI — service worker (offline app shell) */
 
-const CACHE = 'kalorai-v1.3.0';
+const CACHE = 'kalorai-v1.5.1';
 
 const ASSETS = [
   './',

@@ -16,6 +16,7 @@ const LS = {
 
 const CONFIG = window.KALORI_CONFIG || {};
 const FOOD_DB = Array.isArray(window.FOOD_DB) ? window.FOOD_DB : [];
+const APP_VERSION = '1.5.1';
 
 const AI = {
   name: 'Google Gemini',
@@ -286,6 +287,7 @@ function init() {
   applyTheme(state.settings.theme);
   bindSystemTheme();
   renderTodayLabel();
+  renderVersion();
   fillSettings();
   renderAiStatus();
   renderHomeSummary();
@@ -322,9 +324,14 @@ function bindEvents() {
   $('#manualForm').addEventListener('submit', onManualSubmit);
 
   $('#settingsForm').addEventListener('submit', onSaveSettings);
+  $('#setGoal').addEventListener('input', updateGoalMacros);
   $('#btnFetchModels').addEventListener('click', loadGeminiModels);
   $('#btnBackup').addEventListener('click', copyBackupCode);
+  $('#btnBackupFile').addEventListener('click', downloadBackupFile);
+  $('#btnRestoreFile').addEventListener('click', () => $('#backupFileInput').click());
+  $('#backupFileInput').addEventListener('change', onBackupFileSelected);
   $('#btnRestore').addEventListener('click', restoreBackupCode);
+  $('#btnForceUpdate').addEventListener('click', forceUpdate);
   $('#btnWipe').addEventListener('click', wipeData);
 
   $('#themeSwitch').addEventListener('click', onThemeChoice);
@@ -782,6 +789,7 @@ function recomputeTotals(analysis) {
       fiber: analysis.totals ? analysis.totals.fiber || 0 : 0,
       grams: 0,
     };
+    analysis.healthScore = computeHealthScore(analysis.dish, analysis.ingredients, analysis.totals);
     return;
   }
 
@@ -807,6 +815,7 @@ function recomputeTotals(analysis) {
     fat: round1(fat),
     grams: Math.round(grams),
   };
+  analysis.healthScore = computeHealthScore(analysis.dish, analysis.ingredients, analysis.totals);
 }
 
 /* ---------------- loading / error ---------------- */
@@ -848,10 +857,14 @@ function renderResult() {
 
   if (state.editing) {
     const currentName = $('#editDish');
-    if (currentName) analysis.dish = currentName.value;
+    if (currentName) {
+      analysis.dish = currentName.value;
+      analysis.healthScore = computeHealthScore(analysis.dish, analysis.ingredients, analysis.totals);
+    }
   }
 
   const t = analysis.totals;
+  const score = analysis.healthScore || computeHealthScore(analysis.dish, analysis.ingredients, t);
   const macroKcal = t.protein * 4 + t.carbs * 4 + t.fat * 9;
   const base = macroKcal || t.kcal || 1;
   const pPct = Math.round((t.protein * 4) / base * 100);
@@ -862,6 +875,7 @@ function renderResult() {
 
   const chips = [
     editing ? '<span class="chip">Redaktə</span>' : '',
+    score ? `<span class="chip score-${scoreBand(score)}">Sağlamlıq ${score}/10</span>` : '',
     analysis.cuisine ? `<span class="chip">${esc(analysis.cuisine)}</span>` : '',
     analysis.confidence ? `<span class="chip chip-soft">AI inamı ${conf}%</span>` : '',
     analysis.aiRecalculated ? `<span class="chip chip-soft">AI yenilədi</span>` : '',
@@ -1045,8 +1059,12 @@ function editEntry(id) {
     ingredients,
     totals,
     thumb: entry.thumb || '',
+    healthScore: entry.healthScore || 0,
   };
   if (ingredients.length) recomputeTotals(analysis);
+  if (!analysis.healthScore) {
+    analysis.healthScore = computeHealthScore(analysis.dish, analysis.ingredients, analysis.totals);
+  }
 
   state.analysis = analysis;
   state.editing = entry.id;
@@ -1091,6 +1109,7 @@ function saveEntryEdit() {
   entry.totals = { ...analysis.totals };
   entry.thumb = analysis.thumb || entry.thumb || '';
   entry.manual = Boolean(entry.manual && !analysis.ingredients.length);
+  entry.healthScore = computeHealthScore(dish, analysis.ingredients, entry.totals);
   entry.editedAt = Date.now();
 
   writeJSON(LS.entries, state.entries);
@@ -1127,6 +1146,132 @@ function foldText(value) {
   return String(value || '')
     .toLowerCase()
     .replace(/[əıöüçşğ]/g, (ch) => AZ_FOLD[ch] || ch);
+}
+
+/* ---------------- sağlamlıq indeksi (1–10) ---------------- */
+
+const SCORE_CATEGORIES = [
+  {
+    key: 'dessert',
+    base: 4,
+    words: ['tort', 'keks', 'piroq', 'piroj', 'şirniyyat', 'şokolad', 'konfet', 'mürəbbə', 'bal', 'paxlava', 'dondurma', 'biskvit', 'muffin', 'donut', 'şəkər', 'krem'],
+  },
+  { key: 'drink', base: 2, words: ['kola', 'fanta', 'sprite', 'limonad', 'enerji', 'kompot', 'şirə', 'qazlı'] },
+  {
+    key: 'fastfood',
+    base: 4,
+    words: ['hamburger', 'pizza', 'dönər', 'döner', 'hot dog', 'çips', 'kartof fri', 'fri', 'qızard', 'nugget', 'sosis', 'kolbasa', 'vetçina', 'mayonez'],
+  },
+  { key: 'fat', base: 6, words: ['yağ', 'kərə yağı', 'zeytun yağı', 'günəbaxan yağı'] },
+  { key: 'nuts', base: 8, words: ['qoz', 'fındıq', 'badam', 'püstə', 'küncüt'] },
+  {
+    key: 'salad',
+    base: 9,
+    words: ['salat', 'tərəvəz', 'brokoli', 'ispanaq', 'kələm', 'pomidor', 'xiyar', 'bibər', 'badımcan', 'göbələk', 'lobya', 'noxud', 'mərci', 'turşu'],
+  },
+  {
+    key: 'fruit',
+    base: 9,
+    words: ['meyvə', 'alma', 'banan', 'portağal', 'üzüm', 'qarpız', 'yemiş', 'çiyələk', 'armud', 'nar', 'şaftalı', 'ərik', 'xurma', 'limon', 'avokado'],
+  },
+  { key: 'soup', base: 8, words: ['şorba', 'sup', 'bulyon'] },
+  { key: 'grain', base: 6, words: ['düyü', 'plov', 'bulqur', 'qarabaşaq', 'yulaf', 'makaron', 'çörək', 'lavash', 'kartof', 'pide'] },
+  {
+    key: 'protein',
+    base: 8,
+    words: ['toyuq', 'balıq', 'qızılbalıq', 'xək', 'karp', 'yumurta', 'kəsmik', 'qatıq', 'kefir', 'süd', 'karides', 'dana', 'mal əti', 'kabab'],
+  },
+];
+
+function matchScoreCategory(text, tokens) {
+  for (const category of SCORE_CATEGORIES) {
+    for (const word of category.words) {
+      const normalized = foldText(word);
+      if (normalized.includes(' ')) {
+        if (text.includes(normalized)) return category;
+      } else if (normalized.length <= 3) {
+        if (tokens.includes(normalized)) return category;
+      } else if (tokens.some((token) => token === normalized || token.startsWith(normalized))) {
+        return category;
+      }
+    }
+  }
+  return null;
+}
+
+function computeHealthScore(dish, ingredients, totals) {
+  if (!totals) return 0;
+  const kcal = Math.max(0, num(totals.kcal));
+  if (kcal <= 0) return 0;
+
+  const names = (Array.isArray(ingredients) ? ingredients : [])
+    .map((item) => (item && item.name) || '')
+    .join(' ');
+  const text = foldText(`${dish || ''} ${names}`);
+  const tokens = text.split(/[^a-z0-9]+/).filter(Boolean);
+  const dishText = foldText(dish || '');
+  const dishTokens = dishText.split(/[^a-z0-9]+/).filter(Boolean);
+
+  // əvvəl yeməyin adına bax; adadan kategoriya tapılmasa, tərkibə bax
+  const category =
+    matchScoreCategory(dishText, dishTokens) ||
+    matchScoreCategory(text, tokens) || { key: 'mixed', base: 6, words: [] };
+
+  let score = category.base;
+
+  const protein = Math.max(0, num(totals.protein));
+  const carbs = Math.max(0, num(totals.carbs));
+  const fat = Math.max(0, num(totals.fat));
+  const pShare = (protein * 4) / kcal;
+  const cShare = (carbs * 4) / kcal;
+  const fShare = (fat * 9) / kcal;
+  const grams = Math.max(0, num(totals.grams));
+  const density = grams > 0 ? (kcal / grams) * 100 : 0;
+
+  const lightCategory = ['dessert', 'drink', 'fruit', 'salad', 'nuts', 'fat'].includes(category.key);
+
+  if (!lightCategory) {
+    if (pShare >= 0.25) score += 1;
+    else if (pShare < 0.08) score -= 1;
+  }
+
+  if (category.key !== 'nuts' && category.key !== 'fat') {
+    if (fShare >= 0.5) score -= 2;
+    else if (fShare >= 0.38) score -= 1;
+  }
+
+  if (category.key !== 'nuts' && category.key !== 'fat') {
+    if (density >= 550) score -= 2;
+    else if (density >= 400) score -= 1;
+  }
+
+  if (density > 0 && density <= 80 && ['salad', 'fruit', 'soup'].includes(category.key)) {
+    score += 1;
+  }
+
+  if (['dessert', 'drink', 'fastfood'].includes(category.key) && cShare >= 0.55) {
+    score -= 1;
+  }
+
+  return clamp(Math.round(score), 1, 10);
+}
+
+function scoreBand(score) {
+  if (score >= 8) return 'high';
+  if (score >= 5) return 'mid';
+  return 'low';
+}
+
+function scoreLabel(score) {
+  if (score >= 9) return 'Əla';
+  if (score >= 7) return 'Yaxşı';
+  if (score >= 5) return 'Orta';
+  if (score >= 3) return 'Zəif';
+  return 'Çox zəif';
+}
+
+function entryHealthScore(entry) {
+  return entry.healthScore || computeHealthScore(entry.dish, entry.ingredients, entry.totals);
 }
 
 function renderFoodList(query = '') {
@@ -1396,6 +1541,7 @@ function addToDiary() {
       fat: item.fat,
     })),
     totals: { ...analysis.totals },
+    healthScore: analysis.healthScore || computeHealthScore(analysis.dish, analysis.ingredients, analysis.totals),
   };
 
   state.entries.push(entry);
@@ -1514,6 +1660,43 @@ function shiftDay(delta) {
   selectDate(dateKey(d));
 }
 
+const MACRO_SPLIT = { protein: 0.25, carbs: 0.45, fat: 0.3 };
+
+function macroTargets(goal) {
+  const kcal = clamp(Math.round(num(goal) || 2000), 800, 8000);
+  return {
+    kcal,
+    protein: Math.round((kcal * MACRO_SPLIT.protein) / 4),
+    carbs: Math.round((kcal * MACRO_SPLIT.carbs) / 4),
+    fat: Math.round((kcal * MACRO_SPLIT.fat) / 9),
+  };
+}
+
+function renderMacroTargets(totals, goal) {
+  const target = macroTargets(goal);
+  const rows = [
+    { label: 'Zülal', value: totals.protein, target: target.protein },
+    { label: 'Karbohidrat', value: totals.carbs, target: target.carbs },
+    { label: 'Yağ', value: totals.fat, target: target.fat },
+  ];
+
+  $('#macroList').innerHTML = rows
+    .map((row) => {
+      const pct = row.target > 0 ? clamp((row.value / row.target) * 100, 0, 100) : 0;
+      const diff = round1(row.target - row.value);
+      const over = diff < 0;
+      return `<div class="macro-line">
+        <div class="macro-line-top">
+          <span>${row.label}</span>
+          <b>${round1(row.value)} / ${row.target} q</b>
+        </div>
+        <div class="macro-line-bar"><i class="${over ? 'over' : ''}" style="width:${pct}%"></i></div>
+        <div class="macro-line-note ${over ? 'over' : ''}">${over ? `${round1(-diff)} q artıq` : `${diff} q qalıb`}</div>
+      </div>`;
+    })
+    .join('');
+}
+
 function renderDiary() {
   const key = selectedDate();
   const dayEntries = state.entries.filter((entry) => entry.date === key).sort((a, b) => b.ts - a.ts);
@@ -1535,14 +1718,14 @@ function renderDiary() {
       <div class="ring-center"><strong>${fmt(totals.kcal)}</strong><span>/ ${fmt(goal)} kkal</span></div>
     </div>
     <div class="ring-stats">
+      <div class="stat"><span>Qəbul</span><b>${fmt(totals.kcal)} kkal</b></div>
+      <div class="stat"><span>Hədəf</span><b>${fmt(goal)} kkal</b></div>
       <div class="stat"><span>${over ? 'Artıq' : 'Qalan'}</span>
         <b style="color:${over ? 'var(--danger)' : 'var(--brand)'}">${fmt(Math.abs(remaining))} kkal</b>
       </div>
-      <div class="stat"><span>Zülal</span><b>${totals.protein} q</b></div>
-      <div class="stat"><span>Karbohidrat</span><b>${totals.carbs} q</b></div>
-      <div class="stat"><span>Yağ</span><b>${totals.fat} q</b></div>
     </div>`;
 
+  renderMacroTargets(totals, goal);
   renderWeek();
   renderDayEntries(dayEntries, key);
   renderDaysList();
@@ -1666,6 +1849,7 @@ function entryRow(entry) {
   if (grams) parts.push(`${fmt(grams)} q`);
   if (entry.manual) parts.push('əl ilə');
   const expanded = state.expanded.has(entry.id);
+  const score = entryHealthScore(entry);
 
   return `<div class="entry-wrap">
     <div class="entry">
@@ -1677,7 +1861,9 @@ function entryRow(entry) {
       <div class="entry-main" data-expand="${esc(entry.id)}" role="button" tabindex="0" aria-expanded="${expanded}">
         <div class="entry-body">
           <div class="entry-name">${esc(entry.dish || 'Yemək')}</div>
-          <div class="entry-meta">${esc(parts.join(' · '))}</div>
+          <div class="entry-meta">${esc(parts.join(' · '))}${
+            score ? ` <span class="score-mini score-${scoreBand(score)}">${score}/10</span>` : ''
+          }</div>
         </div>
         <div class="entry-kcal">${fmt(totals.kcal)}<span>kkal</span></div>
       </div>
@@ -1696,6 +1882,7 @@ function entryRow(entry) {
 function entryDetail(entry) {
   const items = Array.isArray(entry.ingredients) ? entry.ingredients : [];
   const totals = entry.totals || {};
+  const score = entryHealthScore(entry);
   const list = items.length
     ? `<ul class="entry-ings">${items
         .map(
@@ -1706,6 +1893,11 @@ function entryDetail(entry) {
     : '<p class="muted">Tərkib qeyd edilməyib.</p>';
 
   return `<div class="entry-detail">
+    ${
+      score
+        ? `<div class="entry-score"><span class="score-mini score-${scoreBand(score)}">Sağlamlıq ${score}/10</span><span>${scoreLabel(score)}</span></div>`
+        : ''
+    }
     ${list}
     <div class="entry-macros">Z ${round1(totals.protein)} · K ${round1(totals.carbs)} · Y ${round1(totals.fat)}</div>
   </div>`;
@@ -1770,6 +1962,8 @@ function onManualSubmit(event) {
     },
   };
 
+  entry.healthScore = computeHealthScore(entry.dish, entry.ingredients, entry.totals);
+
   state.entries.push(entry);
   writeJSON(LS.entries, state.entries);
 
@@ -1790,7 +1984,13 @@ function fillSettings() {
   $('#modelStatus').textContent = '';
   $('#keySetup').classList.toggle('hidden', Boolean(CONFIG.geminiApiKey));
   $('#setKey').value = s.apiKey || '';
+  updateGoalMacros();
   applyTheme(s.theme);
+}
+
+function updateGoalMacros() {
+  const target = macroTargets($('#setGoal').value);
+  $('#goalMacros').textContent = `Norma: zülal ${target.protein} q · karbohidrat ${target.carbs} q · yağ ${target.fat} q (25% / 45% / 30%)`;
 }
 
 function onThemeChoice(event) {
@@ -1899,11 +2099,7 @@ function onSaveSettings(event) {
 
   if (!CONFIG.geminiApiKey) {
     const key = $('#setKey').value.trim();
-    if (!key) {
-      toast('AI açarını daxil et');
-      return;
-    }
-    state.settings.apiKey = key;
+    if (key) state.settings.apiKey = key;
   }
 
   state.settings.goal = goal;
@@ -1914,6 +2110,37 @@ function onSaveSettings(event) {
   renderHomeSummary();
   renderDiary();
   toast('Ayarlar saxlanıldı');
+}
+
+function renderVersion() {
+  const el = $('#appVersion');
+  if (el) el.textContent = APP_VERSION;
+}
+
+async function forceUpdate() {
+  if (!confirm('Proqram yenilənsin? Qeydlər və ayarlar silinmir.')) return;
+
+  try {
+    if ('serviceWorker' in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.map((registration) => registration.unregister()));
+    }
+  } catch (err) {
+    console.warn(err);
+  }
+
+  try {
+    if (window.caches) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((key) => caches.delete(key)));
+    }
+  } catch (err) {
+    console.warn(err);
+  }
+
+  const url = new URL(location.href);
+  url.searchParams.set('v', Date.now().toString());
+  location.replace(url.toString());
 }
 
 function wipeData() {
@@ -1943,8 +2170,8 @@ function decodeBase64Utf8(value) {
   return new TextDecoder().decode(bytes);
 }
 
-function buildBackupCode() {
-  const payload = {
+function buildBackupPayload() {
+  return {
     v: 1,
     exportedAt: new Date().toISOString(),
     settings: {
@@ -1961,11 +2188,15 @@ function buildBackupCode() {
       confidence: entry.confidence || 0,
       ingredients: Array.isArray(entry.ingredients) ? entry.ingredients : [],
       totals: entry.totals || {},
+      healthScore: entry.healthScore || 0,
       manual: Boolean(entry.manual),
       editedAt: entry.editedAt || 0,
     })),
   };
-  return BACKUP_PREFIX + encodeBase64Utf8(JSON.stringify(payload));
+}
+
+function buildBackupCode() {
+  return BACKUP_PREFIX + encodeBase64Utf8(JSON.stringify(buildBackupPayload()));
 }
 
 async function copyBackupCode() {
@@ -1979,40 +2210,57 @@ async function copyBackupCode() {
     if (navigator.clipboard && navigator.clipboard.writeText) {
       await navigator.clipboard.writeText(code);
     } else {
-      box.focus();
-      box.select();
       document.execCommand('copy');
     }
-    toast('Ehtiyat kodu kopyalandı');
+    toast(`Kopyalandı (${code.length} simvol)`);
   } catch (err) {
     console.warn(err);
     box.focus();
-    box.select();
-    toast('Kodu əl ilə kopyala (seçildi)');
+    box.setSelectionRange(0, code.length);
+    toast('Kopyalanmadı — kodu əl ilə seçib kopyala');
   }
 }
 
-function restoreBackupCode() {
-  const raw = $('#restoreCode').value.replace(/\s+/g, '');
-  if (!raw) {
-    toast('Bərpa kodunu yapışdır');
-    return;
+function parseBackupCode(input) {
+  let raw = String(input || '').replace(/[\u200b-\u200d\ufeff]/gi, '').trim();
+  raw = raw.replace(/%3a/gi, ':');
+
+  const marker = raw.toUpperCase().indexOf('KALORI1');
+  if (marker === -1) {
+    throw new AppError('Kod “KALORI1:” ilə başlamalıdır. Tam kopyalandığını yoxla.');
+  }
+
+  let rest = raw.slice(marker + 7);
+  if (rest.startsWith(':')) rest = rest.slice(1);
+
+  let body = rest.replace(/[^A-Za-z0-9+/=]/g, '');
+  if (!body) throw new AppError('Kodun məzmunu boşdur.');
+
+  const pad = body.length % 4;
+  if (pad) body += '='.repeat(4 - pad);
+
+  let json;
+  try {
+    json = decodeBase64Utf8(body);
+  } catch {
+    throw new AppError('Kod oxunmadı. Tam kopyalandığını yoxla.');
   }
 
   let payload;
   try {
-    if (!raw.startsWith(BACKUP_PREFIX)) throw new Error('prefix');
-    payload = JSON.parse(decodeBase64Utf8(raw.slice(BACKUP_PREFIX.length)));
+    payload = JSON.parse(json);
   } catch {
-    toast('Kod yanlışdır və ya natamamdır');
-    return;
+    throw new AppError('Kod natamamdır. Yenidən kopyala və ya fayl ilə bərpa et.');
   }
 
   if (!payload || !Array.isArray(payload.entries)) {
-    toast('Kodda qeyd tapılmadı');
-    return;
+    throw new AppError('Kodda qeydlər tapılmadı.');
   }
 
+  return payload;
+}
+
+function applyBackupPayload(payload) {
   const map = new Map(state.entries.map((entry) => [entry.id, entry]));
   let restored = 0;
 
@@ -2034,22 +2282,28 @@ function restoreBackupCode() {
       })
       .filter((ing) => ing.grams > 0);
 
+    const totals = {
+      kcal: Math.max(0, Math.round(num(item.totals && item.totals.kcal))),
+      protein: Math.max(0, round1(num(item.totals && item.totals.protein))),
+      carbs: Math.max(0, round1(num(item.totals && item.totals.carbs))),
+      fat: Math.max(0, round1(num(item.totals && item.totals.fat))),
+      fiber: Math.max(0, round1(num(item.totals && item.totals.fiber))),
+      grams: Math.max(0, Math.round(num(item.totals && item.totals.grams))),
+    };
+    const dish = String(item.dish).slice(0, 120);
+    const givenScore = Math.round(num(item.healthScore));
+    const healthScore = givenScore > 0 ? clamp(givenScore, 1, 10) : computeHealthScore(dish, ingredients, totals);
+
     map.set(String(item.id), {
       id: String(item.id),
       ts: Number(item.ts) || Date.now(),
       date: String(item.date).slice(0, 10),
-      dish: String(item.dish).slice(0, 120),
+      dish,
       description: String(item.description || '').slice(0, 400),
       confidence: clamp(num(item.confidence), 0, 1),
       ingredients,
-      totals: {
-        kcal: Math.max(0, Math.round(num(item.totals && item.totals.kcal))),
-        protein: Math.max(0, round1(num(item.totals && item.totals.protein))),
-        carbs: Math.max(0, round1(num(item.totals && item.totals.carbs))),
-        fat: Math.max(0, round1(num(item.totals && item.totals.fat))),
-        fiber: Math.max(0, round1(num(item.totals && item.totals.fiber))),
-        grams: Math.max(0, Math.round(num(item.totals && item.totals.grams))),
-      },
+      totals,
+      healthScore,
       manual: Boolean(item.manual),
       editedAt: Number(item.editedAt) || 0,
       thumb: '',
@@ -2071,8 +2325,83 @@ function restoreBackupCode() {
   renderHomeSummary();
   renderDiary();
   fillSettings();
+  return restored;
+}
+
+function restoreBackupCode() {
+  const raw = $('#restoreCode').value;
+  if (!raw.trim()) {
+    toast('Bərpa kodunu yapışdır');
+    return;
+  }
+
+  let payload;
+  try {
+    payload = parseBackupCode(raw);
+  } catch (err) {
+    toast(err instanceof AppError ? err.message : 'Kod yanlışdır və ya natamamdır');
+    return;
+  }
+
+  const restored = applyBackupPayload(payload);
   $('#restoreCode').value = '';
   toast(`${restored} qeyd bərpa olundu`);
+}
+
+async function downloadBackupFile() {
+  const payload = buildBackupPayload();
+  const json = JSON.stringify(payload, null, 2);
+  const filename = `kalori-ai-backup-${dateKey()}.json`;
+
+  try {
+    const file = new File([json], filename, { type: 'application/json' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: 'Kalori AI ehtiyat nüsxəsi' });
+      toast('Ehtiyat faylı paylaşıldı');
+      return;
+    }
+  } catch (err) {
+    if (err && err.name === 'AbortError') return;
+    console.warn(err);
+  }
+
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+  toast('Ehtiyat faylı hazırlanır');
+}
+
+function readFileText(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(reader.error || new Error('read'));
+    reader.readAsText(file);
+  });
+}
+
+async function onBackupFileSelected(event) {
+  const input = event.target;
+  const file = input.files && input.files[0];
+  input.value = '';
+  if (!file) return;
+
+  try {
+    const text = await readFileText(file);
+    const payload = JSON.parse(text);
+    if (!payload || !Array.isArray(payload.entries)) throw new Error('format');
+    const restored = applyBackupPayload(payload);
+    toast(`${restored} qeyd bərpa olundu`);
+  } catch (err) {
+    console.error(err);
+    toast('Fayl yanlışdır və ya zədələnib');
+  }
 }
 
 /* ---------------- iOS hint & SW ---------------- */
@@ -2099,6 +2428,8 @@ function dismissIosHint() {
 function registerSW() {
   if (!('serviceWorker' in navigator)) return;
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch((err) => console.warn('SW qeydiyyatı:', err));
+    navigator.serviceWorker
+      .register('./sw.js', { updateViaCache: 'none' })
+      .catch((err) => console.warn('SW qeydiyyatı:', err));
   });
 }

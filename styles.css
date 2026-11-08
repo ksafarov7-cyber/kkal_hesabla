@@ -1401,6 +1401,13 @@ details.hist[open] summary {
   opacity: 0.65;
 }
 
+.backup-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 10px;
+}
+
 .key-wrap {
   position: relative;
   display: block;
@@ -1926,6 +1933,134 @@ details.hist[open] summary {
   align-self: flex-start;
   margin: 0 0 2px;
   font-size: 12px;
+}
+
+/* ---------- diary macro targets ---------- */
+.macro-line {
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.macro-line:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.macro-line-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12.5px;
+}
+
+.macro-line-top span {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.macro-line-top b {
+  font-size: 13.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.macro-line-bar {
+  height: 6px;
+  margin: 6px 0 4px;
+  border-radius: 3px;
+  background: var(--soft);
+  overflow: hidden;
+}
+
+.macro-line-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--brand-2), var(--brand));
+  transition: width 0.3s ease;
+}
+
+.macro-line-bar i.over {
+  background: linear-gradient(90deg, #fca5a5, var(--danger));
+}
+
+.macro-line-note {
+  font-size: 10.5px;
+  color: var(--brand);
+  font-variant-numeric: tabular-nums;
+}
+
+.macro-line-note.over {
+  color: var(--danger);
+}
+
+/* ---------- health score ---------- */
+.chip.score-high,
+.score-mini.score-high {
+  background: rgba(34, 197, 94, 0.16);
+  color: #15803d;
+}
+
+.chip.score-mid,
+.score-mini.score-mid {
+  background: rgba(245, 158, 11, 0.18);
+  color: #b45309;
+}
+
+.chip.score-low,
+.score-mini.score-low {
+  background: rgba(239, 68, 68, 0.16);
+  color: #b91c1c;
+}
+
+.score-mini {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 750;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+
+.entry-score {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 7px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .chip.score-high,
+  :root:not([data-theme="light"]) .score-mini.score-high {
+    color: #4ade80;
+  }
+  :root:not([data-theme="light"]) .chip.score-mid,
+  :root:not([data-theme="light"]) .score-mini.score-mid {
+    color: #fbbf24;
+  }
+  :root:not([data-theme="light"]) .chip.score-low,
+  :root:not([data-theme="light"]) .score-mini.score-low {
+    color: #f87171;
+  }
+}
+
+:root[data-theme="dark"] .chip.score-high,
+:root[data-theme="dark"] .score-mini.score-high {
+  color: #4ade80;
+}
+
+:root[data-theme="dark"] .chip.score-mid,
+:root[data-theme="dark"] .score-mini.score-mid {
+  color: #fbbf24;
+}
+
+:root[data-theme="dark"] .chip.score-low,
+:root[data-theme="dark"] .score-mini.score-low {
+  color: #f87171;
 }
 
 :focus-visible {

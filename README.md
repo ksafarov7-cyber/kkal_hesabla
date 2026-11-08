@@ -14,6 +14,8 @@ Backend yoxdur — tətbiq statik fayllardan ibarətdir və birbaşa Google Gemi
 - **Siyahıda olmayan ərzaq** — adını və qramını yaz; kalorini bilmirsənsə **AI 100 q üçün kalori və makroları təxmin edir**.
 - **AI ilə yenidən hesabla** — tərkib dəyişdikdən sonra düyməni bas; AI bütün qramları nəzərə alıb kalori və makroları yenidən hesablayır.
 - **Gündəlik** — gün seçimi: `‹ ›` düymələri, son 7 günün qrafiki (sütuna toxun) və “Günlər” siyahısı. Seçilmiş günün kalorisi, makroları və yeməkləri görünür; yeməyə toxunanda tərkibi açılır.
+- **Makro normaları** — gündəlik kalori hədəfinə görə zülal / karbohidrat / yağ norması hesablanır; qəbul, norma və qalan (və ya artıq) miqdar göstərilir.
+- **Sağlamlıq balı** — hər yeməyə **1–10** bal: məsələn tort 3/10, toyuq plovu 7/10, tərəvəz salatı 9–10.
 - **Yeməyi redaktə et** — gündəlikdəki hər yeməyin yanındaki **qələm** ikonu ilə adı, qramları və tərkibi dəyiş, ərzaq əlavə et, AI ilə yenidən hesabla və **Yadda saxla**.
 - **Tema** — Avtomatik (telefonun rejiminə görə), Açıq, Tünd.
 - **Ayarlar** — gündəlik hədəf, AI modeli, mövcud modellərin siyahısı.
@@ -39,7 +41,16 @@ PWA-nın telefonda quraşdırılması və kamerasının işləməsi üçün **HT
 
 **GitHub Pages ilə:** repo yaradın → zip-i kompüterdə açın → içindəki faylları repo **kökünə** yükləyin (`icons/` qovluğu da daxil) → **Settings → Pages → Deploy from a branch → `main` / `(root)`**. Link: `https://istifadəçi.github.io/repo/`.
 
-> Faylları dəyişdikdən sonra yenidən yükləyin. Service worker `v1.3.0` keşi avtomatik yeniləyir; ilk açılışda səhifəni iki dəfə yeniləmək lazım ola bilər.
+> Faylları dəyişdikdən sonra yenidən yükləyin. Service worker `v1.5.1` keşi avtomatik yeniləyir; ilk açılışda səhifəni iki dəfə yeniləmək lazım ola bilər.
+
+## Yeniləmə
+
+1. Yeni `kalori-ai.zip`-i deploy et — **bütün faylları** əvəz et (xüsusən `index.html`, `app.js`, `styles.css`, `sw.js`).
+2. Tətbiqi aç → **Ayarlar → Versiya**. Orada **1.5.1** yazmalıdır. Əgər köhnə rəqəm görünürsə, fayllar hələ yenilənməyib.
+3. **Ayarlar → “Yeniləməni yoxla”** düyməsini bas və təsdiq et. Bu, service worker keşini təmizləyib proqramı yenidən açır — **qeydlər silinmir**.
+4. Alternativ: səhifəni iki dəfə yenilə və ya tətbiqi bağlayıb yenidən aç.
+
+> Ekrandaki tətbiq ikonunu silmə — iOS onunla birlikte qeydləri də silir. Yeniləmək üçün yuxarıdaki üsulları istifadə et.
 
 ## AI açarı
 
@@ -64,8 +75,31 @@ Ayarlar → **Görünüş**:
 1. **Gündəlik** bölməsinə keçin.
 2. `‹` / `›` ilə günü dəyişin, 7 günlük qrafikdə sütuna toxunun və ya aşağıdakı **Günlər** siyahısından gün seçin.
 3. Həmin günün kalorisi, zülal/karbohidrat/yağ göstəriciləri və yeməkləri görünür.
-4. Yeməyə toxunanda tərkibi (ad, qram, kalori) açılır.
+4. Yeməyə toxunanda tərkibi (ad, qram, kalori) və sağlamlıq balı açılır.
 5. “Bugünə qayıt” ilə geri dönün.
+
+## Makro normaları
+
+Gündəlik kalori hədəfi əsasında balanslı bölgü hesablanır: **25% zülal, 45% karbohidrat, 30% yağ**.
+
+- 2000 kkal → **125 q zülal · 225 q karbohidrat · 67 q yağ**
+- 1800 kkal → **113 q zülal · 203 q karbohidrat · 60 q yağ**
+
+**Gündəlik → Makrolar** bölməsində hər biri üçün `qəbul / norma` və “X q qalıb” və ya “X q artıq” yazılır; sütun yaşıl, artıq olduqda qırmızı olur. Ayarlarda hədəfi yazanda norma dərhal göstərilir.
+
+## Sağlamlıq balı (1–10)
+
+Hər yemək və hər gündəlik qeydi **1–10** balla qiymətləndirilir. Bal yeməyin növünə və qida dəyərinə görə hesablanır:
+
+| Bal | Qiymət | Nümunə |
+|---|---|---|
+| 9–10 | Əla | tərəvəz salatı, meyvə, toyuq döşü, qoz |
+| 7–8 | Yaxşı | toyuq plovu, şorba, qızarmış ət, yumurta |
+| 5–6 | Orta | çörək, düyü, kartof, zeytun yağı |
+| 3–4 | Zəif | tort, pizza, hamburger, kartof fri |
+| 1–2 | Çox zəif | şəkərli içki, sosis, şokolad |
+
+Hesablamada kateqoriya (salat/meyvə +, qənnadı/fast food −), zülal payı, yağ payı və kalori sıxlığı nəzərə alınır. Bal **təxminidir**, tibbi göstərici deyil.
 
 ## Yeməyi redaktə etmək
 
@@ -90,11 +124,13 @@ Ayarlar → **Görünüş**:
 iOS-da ekrandaki tətbiq ikonunu silsən, həmin PWA-nın yaddaşı (qeydlər) silinir. Ona görə:
 
 - **Yeniləmək üçün ikonu silmə** — tətbiqi aç, səhifəni yenilə (aşağı çək) və ya bağlayıb yenidən aç. Eyni ünvan olduğu müddətdə qeydlər qalır.
-- Telefonu dəyişəndə, tətbiqi yenidən quraşdırarkən və ya brauzer məlumatlarını təmizləyəndə əvvəlcə **ehtiyat kodunu** götür.
+- Telefonu dəyişəndə, tətbiqi yenidən quraşdırarkən və ya brauzer məlumatlarını təmizləyəndə əvvəlcə **ehtiyat nüsxəsini** götür.
 
-**Kodu götürmək:** Ayarlar → **Ehtiyat nüsxə** → **Kodu kopyala**. Kod `KALORI1:...` ilə başlayır; onu qeyd et (Notes, mesaj və s.).
+**Fayl ilə (tövsiyə olunur):** Ayarlar → **Ehtiyat nüsxə** → **Fayl kimi saxla**. `kalori-ai-backup-YYYY-MM-DD.json` faylı Files-ə yüklənir. Bərpa: yeni qurulumda **Fayldan bərpa et** → faylı seç. Bu üsul uzun kodun kopyalanması problemini aradan qaldırır.
 
-**Bərpa etmək:** yeni qurulumda Ayarlar → **Bərpa kodu** sahəsinə kodu yapışdır → **Bərpa et**. Qeydlər, günlər, hədəf və tema geri gəlir. Mövcud qeydlər silinmir — eyni ID-li qeydlər yenilənir.
+**Kod ilə:** **Kodu kopyala** → `KALORI1:...` kopyalanır. Bərpa: **Bərpa kodu** sahəsinə yapışdır → **Bərpa et**. Kodun əvvəlində/sonunda boşluq və ya dırnaq olsa da qəbul olunur. Əgər “Kod natamamdır” yazsa, kodun bir hissəsi kopyalanmayıb — yenidən kopyala və ya fayl üsulunu istifadə et.
+
+Qeydlər, günlər, hədəf və tema geri gəlir. Mövcud qeydlər silinmir — eyni ID-li qeydlər yenilənir.
 
 > Koda **şəkillər** və **API açarı** daxil deyil. Bərpadan sonra açarı yenidən daxil etməlisən. Kod mətnində qida gündəliyin var — lazımsız yerdə paylaşma.
 
@@ -135,6 +171,8 @@ node tools/shot.mjs          # iPhone ölçüsündə ekran görüntüləri + tü
 node tools/ui-test.mjs       # tema, ərzaq axtarışı/əlavə/silmə, AI recalc, gün seçimi
 node tools/edit-test.mjs     # gündəlikdə yemək redaktəsi (ad, qram, tərkib, yadda saxla)
 node tools/backup-test.mjs   # xüsusi ərzaq (əl ilə + AI) və ehtiyat kodunun bərpası
+node tools/macro-test.mjs    # makro normaları və sağlamlıq balı
+node tools/version-test.mjs  # versiya göstəricisi və “Yeniləməni yoxla”
 node tools/api-test.mjs      # Gemini sorğularını mock cavablarla yoxlayır
 node tools/offline-test.mjs  # service worker və oflayn rejim
 ```
