@@ -2,7 +2,7 @@
 
 iPhone üçün **PWA**: yeməyin şəklini çəkirsiniz, süni intellekt yeməyi tanıyır, içindəkiləri qram-qram ayırır və kalori / zülal / karbohidrat / yağ dəyərini hesablayır. Nəticəni əl ilə düzəldə, ərzaq əlavə edə və AI-yə yenidən hesablada bilirsiniz. Hər gün üçün ayrıca gündəlik tutulur.
 
-Backend yoxdur — tətbiq statik fayllardan ibarətdir və birbaşa Google Gemini-yə müraciət edir. API açarı `config.js` faylındadır, interfeysdə göstərilmir.
+Backend yoxdur — tətbiq statik fayllardan ibarətdir və birbaşa Google Gemini-yə müraciət edir. API açarı **Ayarlarda bir dəfə** daxil edilir və yalnız cihazda saxlanılır (istəsəniz `config.js`-ə də yazmaq olar).
 
 ![Tətbiqin görünüşü](preview.png)
 
@@ -33,27 +33,22 @@ PWA-nın telefonda quraşdırılması və kamerasının işləməsi üçün **HT
    Alternativ: GitHub Pages, Vercel, Cloudflare Pages — hamısı pulsuzdur.
 2. Linki **iPhone Safari**-də açın.
 3. **Paylaş → “Ekrana əlavə et”**.
-4. Tətbiqi açın — AI hazırdır, açar daxil etmək lazım deyil.
+4. Tətbiqi açın → **Ayarlar → AI açarı** → açarı yapışdırın → **Yadda saxla**. Açar yalnız həmin cihazda qalır.
 
-> Faylları dəyişdikdən sonra yenidən yükləyin. Service worker `v1.1.0` keşi avtomatik yeniləyir; ilk açılışda səhifəni iki dəfə yeniləmək lazım ola bilər.
+**GitHub Pages ilə:** repo yaradın → zip-i kompüterdə açın → içindəki faylları repo **kökünə** yükləyin (`icons/` qovluğu da daxil) → **Settings → Pages → Deploy from a branch → `main` / `(root)`**. Link: `https://istifadəçi.github.io/repo/`.
 
-## AI konfiqurasiyası (açar kodda)
+> Faylları dəyişdikdən sonra yenidən yükləyin. Service worker `v1.1.1` keşi avtomatik yeniləyir; ilk açılışda səhifəni iki dəfə yeniləmək lazım ola bilər.
 
-Açar **`config.js`** faylındadır:
+## AI açarı
 
-```js
-window.KALORI_CONFIG = {
-  geminiApiKey: 'AQ....',
-};
-```
+Açarı **Ayarlar → AI açarı** sahəsinə bir dəfə daxil edirsiniz; `localStorage`-da yalnız həmin cihazda saxlanılır. Repository-də açar olmadığı üçün GitHub-a public yükləmək təhlükəsizdir.
 
-- İnterfeysdə API açarı sahəsi, provayder seçimi və ya Base URL yoxdur — istifadəçi açarı görmür.
-- Açarı dəyişmək üçün `config.js`-i redaktə edib yenidən deploy edin.
+- **401 / “API açarı etibarsızdır”** görsəniz: açar ləğv olunub və ya yanlışdır. [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey) → **Create API key** → yeni açarı Ayarlarda yapışdırın.
+- Açarı koda yazmaq istəsəniz: `config.js` → `geminiApiKey: 'AQ....'`. Bu halda Ayarlarda açar sahəsi görünməz, amma **public repoda açar tez ləğv olunur** — tövsiyə edilmir.
 - Standart model: **`gemini-3.6-flash`** (~5–10 saniyə). Ayarlarda **“Mövcud modelləri gətir”** düyməsi açarınıza uyğun modelləri siyahıya salır.
-- Köhnə `gemini-2.5-flash` yeni istifadəçilər üçün bağlıdır (404). Tətbiq bu halda avtomatik `gemini-3.6-flash → gemini-3.7-flash → gemini-3.5-flash-lite` sırası ilə yoxlayır.
-- Yeni açar lazım olsa: [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey) → **Create API key**.
+- Köhnə `gemini-2.5-flash` yeni istifadəçilər üçün bağlıdır (404). Tətbiq avtomatik `gemini-3.6-flash → gemini-3.7-flash → gemini-3.5-flash-lite` sırası ilə yoxlayır.
 
-> **Vacib:** statik saytda açar mənbə kodunda görünür. Şəxsi istifadə üçün bu normaldır, amma linki ictimai paylaşsanız, açarı istənilən adam çıxara bilər. Ciddi paylaşım üçün backend proxy (açar serverdə) lazımdır — bu, növbəti addımdır.
+> **Vacib:** açarı public GitHub reposuna və ya `config.js`-ə yazmayın. Açarı brauzerə göndərmədən saxlamaq üçün backend proxy (Cloudflare Worker / Netlify Function) lazımdır — bu, növbəti addımdır.
 
 ## Tema
 
@@ -72,7 +67,8 @@ Ayarlar → **Görünüş**:
 
 ## Təhlükəsizlik və məxfilik
 
-- API açarı `config.js`-dədir; `localStorage`-da saxlanılmır.
+- Açar Ayarlarda daxil edilibsə, yalnız həmin cihazın `localStorage`-unda saxlanılır; repo-da və ya serverdə deyil.
+- `config.js`-ə açar yazılsa, o, saytın mənbə kodunda görünür — public repo üçün tövsiyə edilmir.
 - Qeydlər, hədəf və tema yalnız cihazda (`localStorage`) qalır.
 - Şəkil yalnız Google Gemini-yə göndərilir.
 - Telefonu başqasına verirsinizsə: Ayarlar → “Bütün məlumatları sil”.
@@ -84,7 +80,7 @@ kalori-ai/
 ├── index.html            # bütün ekranlar
 ├── styles.css            # dizayn (işıq + qaranlıq + tema dəyişənləri)
 ├── app.js                # məntiq: kamera, AI, ərzaq, gündəlik, ayarlar
-├── config.js             # Gemini API açarı (interfeysdə göstərilmir)
+├── config.js             # AI konfiqurasiyası (açar opsional)
 ├── foods.js              # 100+ ərzağın 100 q üçün qida dəyərləri
 ├── sw.js                 # service worker (offline)
 ├── manifest.webmanifest  # PWA manifest

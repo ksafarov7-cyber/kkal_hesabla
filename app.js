@@ -230,12 +230,17 @@ function loadSettings() {
     model: String(saved.model || AI.model),
     goal: clamp(Math.round(num(saved.goal) || 2000), 800, 8000),
     theme: ['auto', 'light', 'dark'].includes(saved.theme) ? saved.theme : 'auto',
+    apiKey: CONFIG.geminiApiKey ? '' : String(saved.apiKey || ''),
   };
   // Yeni istifadəçilər üçün bağlanmış köhnə Gemini modellərini avtomatik yenilə
   if (/^gemini-(1\.5|2\.0|2\.5)(-|$)/.test(s.model)) {
     s.model = AI.model;
   }
   return s;
+}
+
+function activeApiKey() {
+  return String(CONFIG.geminiApiKey || state.settings.apiKey || '').trim();
 }
 
 /* ---------------- toast ---------------- */
@@ -484,8 +489,9 @@ async function analyze() {
   }
 
   const settings = state.settings;
-  if (!CONFIG.geminiApiKey) {
-    toast('AI konfiqurasiyası tapılmadı (config.js)');
+  if (!activeApiKey()) {
+    toast('AI açarı yoxdur — Ayarlarda əlavə et');
+    setTab('settings');
     return;
   }
 
@@ -535,8 +541,8 @@ async function callGemini(dataUrl, settings) {
 }
 
 async function geminiRequest(parts, schema, settings) {
-  const apiKey = CONFIG.geminiApiKey;
-  if (!apiKey) throw new AppError('AI konfiqurasiyası tapılmadı (config.js).');
+  const apiKey = activeApiKey();
+  if (!apiKey) throw new AppError('AI açarı yoxdur. Ayarlarda əlavə et.');
 
   const requested = (settings.model || AI.model).replace(/^models\//, '').trim();
   const chain = [requested, ...GEMINI_FALLBACKS.filter((model) => model !== requested)].slice(0, 3);
@@ -643,9 +649,16 @@ async function apiError(res) {
     }
   }
 
+  const invalidKey = /api key not valid|api_key_invalid|api key expired|access_token_type_unsupported/i.test(detail);
+  if (invalidKey) {
+    const error = new AppError('API açarı etibarsızdır — Ayarlarda yeni açar daxil et', detail);
+    error.status = 401;
+    return error;
+  }
+
   const map = {
     400: 'Sorğu qəbul edilmədi (400)',
-    401: 'API açarı yanlışdır (401)',
+    401: 'API açarı etibarsızdır (401) — Ayarlarda yeni açar daxil et',
     403: 'Bu açarın icazəsi yoxdur (403)',
     404: 'Model mövcud deyil (404) — Ayarlarda “Modelləri gətir” ilə yenilə',
     413: 'Şəkil çox böyükdür (413)',
@@ -1245,12 +1258,12 @@ function renderHomeSummary() {
 function renderAiStatus() {
   const el = $('#aiStatus');
   if (!el) return;
-  if (CONFIG.geminiApiKey) {
+  if (activeApiKey()) {
     el.className = 'status-btn ok';
     el.textContent = 'Google Gemini hazır';
   } else {
     el.className = 'status-btn';
-    el.textContent = 'AI konfiqurasiyası yoxdur';
+    el.textContent = 'AI açarını qoş →';
   }
 }
 
@@ -1540,6 +1553,8 @@ function fillSettings() {
   $('#setModel').value = s.model;
   $('#modelSelectWrap').classList.add('hidden');
   $('#modelStatus').textContent = '';
+  $('#keySetup').classList.toggle('hidden', Boolean(CONFIG.geminiApiKey));
+  $('#setKey').value = s.apiKey || '';
   applyTheme(s.theme);
 }
 
@@ -1578,9 +1593,9 @@ function bindSystemTheme() {
 }
 
 async function loadGeminiModels() {
-  const key = CONFIG.geminiApiKey;
+  const key = activeApiKey();
   if (!key) {
-    toast('AI konfiqurasiyası tapılmadı');
+    toast('Əvvəlcə AI açarını əlavə et');
     return;
   }
 
@@ -1647,10 +1662,20 @@ function onSaveSettings(event) {
   const goal = clamp(Math.round(num($('#setGoal').value) || 2000), 800, 8000);
   const model = $('#setModel').value.trim() || AI.model;
 
+  if (!CONFIG.geminiApiKey) {
+    const key = $('#setKey').value.trim();
+    if (!key) {
+      toast('AI açarını daxil et');
+      return;
+    }
+    state.settings.apiKey = key;
+  }
+
   state.settings.goal = goal;
   state.settings.model = model;
   writeJSON(LS.settings, state.settings);
 
+  renderAiStatus();
   renderHomeSummary();
   renderDiary();
   toast('Ayarlar saxlanıldı');

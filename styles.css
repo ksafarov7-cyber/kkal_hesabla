@@ -154,9 +154,18 @@ p {
   width: 38px;
   height: 38px;
   border-radius: 11px;
-  display: block;
+  display: grid;
+  place-items: center;
   flex: none;
+  overflow: hidden;
+  background: #0b1220;
   box-shadow: 0 6px 14px -8px rgba(11, 18, 32, 0.6);
+}
+
+.brand-mark svg {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 .brand-text {

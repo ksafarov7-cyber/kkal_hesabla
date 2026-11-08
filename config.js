@@ -1,8 +1,11 @@
 // Kalori AI — AI konfiqurasiyası.
-// Bu fayl tətbiqin kodunun bir hissəsidir; interfeysdə açar göstərilmir.
-// Qeyd: statik saytda açar mənbə kodunda görünə bilər. Saytı paylaşmazdan əvvəl
-// açarı yeniləmək və ya backend proxy istifadə etmək tövsiyə olunur.
+//
+// Açarı burada saxlamamaq tövsiyə olunur: public GitHub reposunda olan açar
+// tez bir zamanda tapılıb ləğv edilə bilər. Boş saxla və açarı telefonda
+// Ayarlar → AI açarı bölməsində bir dəfə daxil et.
+//
+// İstəsən açarı buraya da yaza bilərsən — o halda Ayarlarda açar sahəsi görünməz.
 
 window.KALORI_CONFIG = {
-  geminiApiKey: 'AQ.Ab8RN6Ik19iphrvVpNdpR5BXboAo_AKfgFGPNZ34MjS81dEq2Q',
+  geminiApiKey: '',
 };
