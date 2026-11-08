@@ -249,13 +249,26 @@
       </form>
 
       <section class="card">
+        <h3>Ehtiyat nüsxə</h3>
+        <p class="text-sm">Telefonu dəyişəndə və ya tətbiqi yenidən quraşdırarkən qeydləri bərpa etmək üçün kodu kopyala. Şəkillər koda daxil deyil; qeydlər, günlər və hədəf bərpa olunur.</p>
+        <button class="btn btn-outline btn-block" id="btnBackup" type="button">Kodu kopyala</button>
+        <label class="field">Ehtiyat kodu
+          <textarea class="code-box" id="backupCode" readonly placeholder="“Kodu kopyala”ya basanda burada görünəcək"></textarea>
+        </label>
+        <label class="field">Bərpa kodu
+          <textarea class="code-box" id="restoreCode" placeholder="Köhnə kodu buraya yapışdır"></textarea>
+        </label>
+        <button class="btn btn-primary btn-block" id="btnRestore" type="button">Bərpa et</button>
+      </section>
+
+      <section class="card">
         <h3>Məlumat və təhlükəsizlik</h3>
-        <p class="text-sm">AI açarı tətbiqin kodunda (<b>config.js</b>) saxlanılır və interfeysdə göstərilmir. Qeydlər, ayarlar və hədəf yalnız bu cihazda (localStorage) qalır. Şəkil birbaşa Google Gemini-yə göndərilir.</p>
+        <p class="text-sm">AI açarı Ayarlarda daxil edilibsə, yalnız bu cihazda (localStorage) saxlanılır. Qeydlər, ayarlar və hədəf də yalnız bu cihazda qalır. Şəkil birbaşa Google Gemini-yə göndərilir.</p>
         <p class="text-sm">AI nəticəsi təxminidir və tibbi məsləhət deyil. Xroniki xəstəlik, hamiləlik və ya xüsusi pəhriz zamanı həkimə müraciət et.</p>
         <button class="btn btn-danger btn-block" id="btnWipe" type="button">Bütün məlumatları sil</button>
       </section>
 
-      <p class="footer-note">Kalori AI · PWA · v1.2</p>
+      <p class="footer-note">Kalori AI · PWA · v1.3</p>
     </main>
   </div>
 
@@ -297,12 +310,16 @@
       <div class="food-list" id="foodList"></div>
       <button class="food-custom-btn" id="foodCustomBtn" type="button">＋ Siyahıda yoxdur — özün yaz</button>
       <form class="food-custom hidden" id="foodCustomForm">
+        <button class="link-btn food-back" id="foodBackToList" type="button">← Siyahıya qayıt</button>
         <label class="field">Ad
           <input id="fcName" type="text" placeholder="Məs. Evdə bişmiş kükü" maxlength="60" required>
         </label>
         <div class="grid-2">
-          <label class="field">100 q üçün kkal
-            <input id="fcKcal" type="number" inputmode="numeric" min="0" max="2000" placeholder="250" required>
+          <label class="field">Qram
+            <input id="fcGrams" type="number" inputmode="numeric" min="1" max="3000" step="1" value="100" required>
+          </label>
+          <label class="field">Kalori (100 q)
+            <input id="fcKcal" type="number" inputmode="numeric" min="0" max="2000" placeholder="AI hesablasın">
           </label>
           <label class="field">Zülal (q)
             <input id="fcProtein" type="number" inputmode="decimal" min="0" max="200" step="0.1" placeholder="10">
@@ -314,7 +331,8 @@
             <input id="fcFat" type="number" inputmode="decimal" min="0" max="200" step="0.1" placeholder="12">
           </label>
         </div>
-        <button class="btn btn-primary btn-block" type="submit">Əlavə et (100 q)</button>
+        <p class="help">Kalori sütununu boş buraxsan, AI 100 q üçün kalori və makroları təxmin edəcək. Dəyərlər 100 q üçündür.</p>
+        <button class="btn btn-primary btn-block" id="fcSubmit" type="submit">Əlavə et</button>
       </form>
     </div>
   </div>

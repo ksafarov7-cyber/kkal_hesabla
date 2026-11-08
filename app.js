@@ -136,6 +136,18 @@ const RECALC_SCHEMA = {
   required: ['ingredients'],
 };
 
+const FOOD_ESTIMATE_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    name: { type: 'STRING' },
+    kcal100: { type: 'NUMBER' },
+    protein100: { type: 'NUMBER' },
+    carbs100: { type: 'NUMBER' },
+    fat100: { type: 'NUMBER' },
+  },
+  required: ['name', 'kcal100', 'protein100', 'carbs100', 'fat100'],
+};
+
 const SAMPLE = {
   dish: 'Toyuq plovu',
   description: 'Düyü ilə bişirilmiş toyuq əti, kərə yağı və yerkökü ilə.',
@@ -311,6 +323,8 @@ function bindEvents() {
 
   $('#settingsForm').addEventListener('submit', onSaveSettings);
   $('#btnFetchModels').addEventListener('click', loadGeminiModels);
+  $('#btnBackup').addEventListener('click', copyBackupCode);
+  $('#btnRestore').addEventListener('click', restoreBackupCode);
   $('#btnWipe').addEventListener('click', wipeData);
 
   $('#themeSwitch').addEventListener('click', onThemeChoice);
@@ -322,6 +336,7 @@ function bindEvents() {
   $('#foodSearch').addEventListener('input', (event) => renderFoodList(event.target.value));
   $('#foodList').addEventListener('click', onFoodListClick);
   $('#foodCustomBtn').addEventListener('click', toggleCustomFood);
+  $('#foodBackToList').addEventListener('click', backToFoodList);
   $('#foodCustomForm').addEventListener('submit', onCustomFoodSubmit);
   $('#foodSheet').addEventListener('click', (event) => {
     if (event.target.id === 'foodSheet') closeFoodSheet();
@@ -1138,6 +1153,8 @@ function openFoodSheet() {
   $('#foodSheet').classList.remove('hidden');
   document.body.classList.add('locked');
   $('#foodSearch').value = '';
+  $('#foodSearch').classList.remove('hidden');
+  $('#foodList').classList.remove('hidden');
   $('#foodCustomForm').classList.add('hidden');
   $('#foodCustomBtn').classList.remove('hidden');
   renderFoodList('');
@@ -1150,6 +1167,13 @@ function closeFoodSheet() {
   $('#foodCustomForm').reset();
   $('#foodCustomForm').classList.add('hidden');
   $('#foodCustomBtn').classList.remove('hidden');
+  $('#foodSearch').classList.remove('hidden');
+  $('#foodList').classList.remove('hidden');
+  const submit = $('#fcSubmit');
+  if (submit) {
+    submit.disabled = false;
+    submit.textContent = 'Əlavə et';
+  }
 }
 
 function onFoodListClick(event) {
@@ -1189,33 +1213,86 @@ function addFoodItem(item, grams) {
 
 function toggleCustomFood() {
   $('#foodCustomBtn').classList.add('hidden');
+  $('#foodSearch').classList.add('hidden');
+  $('#foodList').classList.add('hidden');
   $('#foodCustomForm').classList.remove('hidden');
   $('#fcName').focus();
 }
 
-function onCustomFoodSubmit(event) {
+function backToFoodList() {
+  $('#foodCustomForm').classList.add('hidden');
+  $('#foodCustomBtn').classList.remove('hidden');
+  $('#foodSearch').classList.remove('hidden');
+  $('#foodList').classList.remove('hidden');
+  $('#foodSearch').focus();
+}
+
+async function onCustomFoodSubmit(event) {
   event.preventDefault();
+
   const name = $('#fcName').value.trim();
-  const kcal = num($('#fcKcal').value);
+  const grams = clamp(Math.round(num($('#fcGrams').value) || 100), 1, 3000);
   if (!name) {
     toast('Ərzağın adını yaz');
     return;
   }
-  if (kcal <= 0) {
-    toast('100 q üçün kalori yaz');
+
+  let kcal100 = Math.max(0, num($('#fcKcal').value));
+  let protein100 = Math.max(0, num($('#fcProtein').value));
+  let carbs100 = Math.max(0, num($('#fcCarbs').value));
+  let fat100 = Math.max(0, num($('#fcFat').value));
+
+  if (kcal100 > 0) {
+    addFoodItem({ n: name, k: kcal100, p: protein100, c: carbs100, f: fat100 }, grams);
     return;
   }
 
-  addFoodItem(
-    {
-      n: name,
-      k: kcal,
-      p: Math.max(0, num($('#fcProtein').value)),
-      c: Math.max(0, num($('#fcCarbs').value)),
-      f: Math.max(0, num($('#fcFat').value)),
-    },
-    100
-  );
+  if (!activeApiKey()) {
+    toast('AI açarı yoxdur — kalori sütununu əl ilə doldur');
+    return;
+  }
+
+  const button = $('#fcSubmit');
+  button.disabled = true;
+  button.textContent = 'AI hesablayır…';
+
+  try {
+    const estimate = await estimateFoodNutrition(name);
+    if ($('#foodSheet').classList.contains('hidden')) return;
+    kcal100 = estimate.kcal100;
+    protein100 = estimate.protein100;
+    carbs100 = estimate.carbs100;
+    fat100 = estimate.fat100;
+    addFoodItem({ n: name, k: kcal100, p: protein100, c: carbs100, f: fat100 }, grams);
+  } catch (err) {
+    console.error(err);
+    toast(err instanceof AppError ? err.message : 'AI təxmin edə bilmədi');
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Əlavə et';
+  }
+}
+
+async function estimateFoodNutrition(name) {
+  const prompt = `Sən qida dəyəri hesablayan köməkçisən. “${name}” üçün 100 qramın təxmini qida dəyərini ver.
+
+Qaydalar:
+- Azərbaycan dilində yalnız JSON qaytar.
+- kcal100, protein100, carbs100, fat100 — 100 qram üçün.
+- 4 kkal/q zülal, 4 kkal/q karbohidrat, 9 kkal/q yağ.`;
+
+  const raw = await geminiRequest([{ text: prompt }], FOOD_ESTIMATE_SCHEMA, state.settings);
+  const kcal100 = Math.max(0, num(raw && raw.kcal100));
+  if (kcal100 <= 0) {
+    throw new AppError('AI kalori təxmin edə bilmədi. Kalori sütununu əl ilə doldur.');
+  }
+
+  return {
+    kcal100,
+    protein100: Math.max(0, num(raw && raw.protein100)),
+    carbs100: Math.max(0, num(raw && raw.carbs100)),
+    fat100: Math.max(0, num(raw && raw.fat100)),
+  };
 }
 
 /* ---------------- AI ilə yenidən hesablama ---------------- */
@@ -1843,6 +1920,159 @@ function wipeData() {
   if (!confirm('Bütün qeydlər və ayarlar silinsin?')) return;
   [LS.settings, LS.entries, LS.iosHint].forEach((key) => localStorage.removeItem(key));
   location.reload();
+}
+
+/* ---------------- ehtiyat nüsxə ---------------- */
+
+const BACKUP_PREFIX = 'KALORI1:';
+
+function encodeBase64Utf8(text) {
+  const bytes = new TextEncoder().encode(text);
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
+function decodeBase64Utf8(value) {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
+}
+
+function buildBackupCode() {
+  const payload = {
+    v: 1,
+    exportedAt: new Date().toISOString(),
+    settings: {
+      goal: state.settings.goal,
+      theme: state.settings.theme,
+      model: state.settings.model,
+    },
+    entries: state.entries.map((entry) => ({
+      id: entry.id,
+      ts: entry.ts,
+      date: entry.date,
+      dish: entry.dish,
+      description: entry.description || '',
+      confidence: entry.confidence || 0,
+      ingredients: Array.isArray(entry.ingredients) ? entry.ingredients : [],
+      totals: entry.totals || {},
+      manual: Boolean(entry.manual),
+      editedAt: entry.editedAt || 0,
+    })),
+  };
+  return BACKUP_PREFIX + encodeBase64Utf8(JSON.stringify(payload));
+}
+
+async function copyBackupCode() {
+  const code = buildBackupCode();
+  const box = $('#backupCode');
+  box.value = code;
+  box.scrollTop = 0;
+  box.scrollLeft = 0;
+
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(code);
+    } else {
+      box.focus();
+      box.select();
+      document.execCommand('copy');
+    }
+    toast('Ehtiyat kodu kopyalandı');
+  } catch (err) {
+    console.warn(err);
+    box.focus();
+    box.select();
+    toast('Kodu əl ilə kopyala (seçildi)');
+  }
+}
+
+function restoreBackupCode() {
+  const raw = $('#restoreCode').value.replace(/\s+/g, '');
+  if (!raw) {
+    toast('Bərpa kodunu yapışdır');
+    return;
+  }
+
+  let payload;
+  try {
+    if (!raw.startsWith(BACKUP_PREFIX)) throw new Error('prefix');
+    payload = JSON.parse(decodeBase64Utf8(raw.slice(BACKUP_PREFIX.length)));
+  } catch {
+    toast('Kod yanlışdır və ya natamamdır');
+    return;
+  }
+
+  if (!payload || !Array.isArray(payload.entries)) {
+    toast('Kodda qeyd tapılmadı');
+    return;
+  }
+
+  const map = new Map(state.entries.map((entry) => [entry.id, entry]));
+  let restored = 0;
+
+  for (const item of payload.entries.slice(0, 5000)) {
+    if (!item || !item.id || !item.date || !item.dish) continue;
+
+    const ingredients = (Array.isArray(item.ingredients) ? item.ingredients : [])
+      .slice(0, 40)
+      .map((ing) => {
+        const grams = Math.max(1, Math.round(num(ing && ing.grams)));
+        return {
+          name: String((ing && ing.name) || 'Tərkib').slice(0, 80),
+          grams,
+          kcal: Math.max(0, Math.round(num(ing && ing.kcal))),
+          protein: Math.max(0, round1(num(ing && ing.protein))),
+          carbs: Math.max(0, round1(num(ing && ing.carbs))),
+          fat: Math.max(0, round1(num(ing && ing.fat))),
+        };
+      })
+      .filter((ing) => ing.grams > 0);
+
+    map.set(String(item.id), {
+      id: String(item.id),
+      ts: Number(item.ts) || Date.now(),
+      date: String(item.date).slice(0, 10),
+      dish: String(item.dish).slice(0, 120),
+      description: String(item.description || '').slice(0, 400),
+      confidence: clamp(num(item.confidence), 0, 1),
+      ingredients,
+      totals: {
+        kcal: Math.max(0, Math.round(num(item.totals && item.totals.kcal))),
+        protein: Math.max(0, round1(num(item.totals && item.totals.protein))),
+        carbs: Math.max(0, round1(num(item.totals && item.totals.carbs))),
+        fat: Math.max(0, round1(num(item.totals && item.totals.fat))),
+        fiber: Math.max(0, round1(num(item.totals && item.totals.fiber))),
+        grams: Math.max(0, Math.round(num(item.totals && item.totals.grams))),
+      },
+      manual: Boolean(item.manual),
+      editedAt: Number(item.editedAt) || 0,
+      thumb: '',
+    });
+    restored += 1;
+  }
+
+  state.entries = Array.from(map.values()).sort((a, b) => (b.ts || 0) - (a.ts || 0));
+
+  const settings = payload.settings || {};
+  if (settings.goal) state.settings.goal = clamp(Math.round(num(settings.goal)), 800, 8000);
+  if (['auto', 'light', 'dark'].includes(settings.theme)) state.settings.theme = settings.theme;
+  if (settings.model) state.settings.model = String(settings.model).slice(0, 80);
+
+  writeJSON(LS.entries, state.entries);
+  writeJSON(LS.settings, state.settings);
+
+  applyTheme(state.settings.theme);
+  renderHomeSummary();
+  renderDiary();
+  fillSettings();
+  $('#restoreCode').value = '';
+  toast(`${restored} qeyd bərpa olundu`);
 }
 
 /* ---------------- iOS hint & SW ---------------- */

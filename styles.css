@@ -1379,6 +1379,28 @@ details.hist[open] summary {
   font-weight: 400;
 }
 
+.code-box {
+  display: block;
+  width: 100%;
+  min-height: 78px;
+  margin-top: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--soft);
+  color: var(--ink);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.45;
+  word-break: break-all;
+  resize: vertical;
+}
+
+.code-box::placeholder {
+  color: var(--muted);
+  opacity: 0.65;
+}
+
 .key-wrap {
   position: relative;
   display: block;
@@ -1898,6 +1920,12 @@ details.hist[open] summary {
   flex-direction: column;
   gap: 4px;
   overflow: auto;
+}
+
+.food-back {
+  align-self: flex-start;
+  margin: 0 0 2px;
+  font-size: 12px;
 }
 
 :focus-visible {

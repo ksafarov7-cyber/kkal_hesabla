@@ -10,7 +10,8 @@ Backend yoxdur — tətbiq statik fayllardan ibarətdir və birbaşa Google Gemi
 
 - **Şəkildən analiz** — kamera və ya qalereya. Şəkil avtomatik 1200px-ə kiçilir.
 - **AI cavabı** — yeməyin adı, növü, təsviri, tərkibi (hər məhsulun qramı, kalorisi, zülalı, karbohidratı, yağı), ümumi göstəricilər, AI inam faizi.
-- **Tərkibi əl ilə düzəlt** — hər məhsulun qramını dəyiş, lazımsızunu sil. `＋ Ərzaq əlavə et` ilə 100-dən çox məhsulluq **axtarışlı siyahı**dan seç və ya siyahıda olmayanı özün yaz (100 q üçün kalori və makrolar).
+- **Tərkibi əl ilə düzəlt** — hər məhsulun qramını dəyiş, lazımsızunu sil. `＋ Ərzaq əlavə et` ilə 100-dən çox məhsulluq **axtarışlı siyahı**dan seç.
+- **Siyahıda olmayan ərzaq** — adını və qramını yaz; kalorini bilmirsənsə **AI 100 q üçün kalori və makroları təxmin edir**.
 - **AI ilə yenidən hesabla** — tərkib dəyişdikdən sonra düyməni bas; AI bütün qramları nəzərə alıb kalori və makroları yenidən hesablayır.
 - **Gündəlik** — gün seçimi: `‹ ›` düymələri, son 7 günün qrafiki (sütuna toxun) və “Günlər” siyahısı. Seçilmiş günün kalorisi, makroları və yeməkləri görünür; yeməyə toxunanda tərkibi açılır.
 - **Yeməyi redaktə et** — gündəlikdəki hər yeməyin yanındaki **qələm** ikonu ilə adı, qramları və tərkibi dəyiş, ərzaq əlavə et, AI ilə yenidən hesabla və **Yadda saxla**.
@@ -38,7 +39,7 @@ PWA-nın telefonda quraşdırılması və kamerasının işləməsi üçün **HT
 
 **GitHub Pages ilə:** repo yaradın → zip-i kompüterdə açın → içindəki faylları repo **kökünə** yükləyin (`icons/` qovluğu da daxil) → **Settings → Pages → Deploy from a branch → `main` / `(root)`**. Link: `https://istifadəçi.github.io/repo/`.
 
-> Faylları dəyişdikdən sonra yenidən yükləyin. Service worker `v1.2.0` keşi avtomatik yeniləyir; ilk açılışda səhifəni iki dəfə yeniləmək lazım ola bilər.
+> Faylları dəyişdikdən sonra yenidən yükləyin. Service worker `v1.3.0` keşi avtomatik yeniləyir; ilk açılışda səhifəni iki dəfə yeniləmək lazım ola bilər.
 
 ## AI açarı
 
@@ -73,6 +74,29 @@ Ayarlar → **Görünüş**:
 3. Adı dəyiş, qramları düzəlt, **＋ Ərzaq əlavə et** ilə tərkib əlavə et və ya **×** ilə sil, istəsən **AI ilə yenidən hesabla**.
 4. **Yadda saxla** — dəyişikliklər həmin günün qeydinə yazılır və gündəlik yenilənir.
 5. **Ləğv et** — heç nə dəyişmir. Keçmiş günü redaktə etsən, yadda saxladıqdan sonra yenə həmin günə qayıdırsan.
+
+## Siyahıda olmayan ərzaq əlavə etmək
+
+1. Nəticə ekranında (və ya redaktədə) **＋ Ərzaq əlavə et** → **“Siyahıda yoxdur — özün yaz”**.
+2. Adı və **qramı** yaz.
+3. **Kalori** sütununu boş buraxsan, AI 100 q üçün kalori və makroları təxmin edir; proqram qramına uyğun hesablayır.
+4. Kalorini özün bilirsənsə, 100 q üçün dəyəri yaz — AI çağırışı olmadan əlavə olunur.
+5. **Əlavə et** — ərzaq qramı ilə birlikdə tərkibə düşür.
+
+> AI təxmini üçün Ayarlarda açar olmalıdır. Açar yoxdursa, kalori sütununu əl ilə doldur.
+
+## Ehtiyat nüsxə: qeydləri itirməmək
+
+iOS-da ekrandaki tətbiq ikonunu silsən, həmin PWA-nın yaddaşı (qeydlər) silinir. Ona görə:
+
+- **Yeniləmək üçün ikonu silmə** — tətbiqi aç, səhifəni yenilə (aşağı çək) və ya bağlayıb yenidən aç. Eyni ünvan olduğu müddətdə qeydlər qalır.
+- Telefonu dəyişəndə, tətbiqi yenidən quraşdırarkən və ya brauzer məlumatlarını təmizləyəndə əvvəlcə **ehtiyat kodunu** götür.
+
+**Kodu götürmək:** Ayarlar → **Ehtiyat nüsxə** → **Kodu kopyala**. Kod `KALORI1:...` ilə başlayır; onu qeyd et (Notes, mesaj və s.).
+
+**Bərpa etmək:** yeni qurulumda Ayarlar → **Bərpa kodu** sahəsinə kodu yapışdır → **Bərpa et**. Qeydlər, günlər, hədəf və tema geri gəlir. Mövcud qeydlər silinmir — eyni ID-li qeydlər yenilənir.
+
+> Koda **şəkillər** və **API açarı** daxil deyil. Bərpadan sonra açarı yenidən daxil etməlisən. Kod mətnində qida gündəliyin var — lazımsız yerdə paylaşma.
 
 ## Təhlükəsizlik və məxfilik
 
@@ -110,6 +134,7 @@ Testlər Chrome/Edge-i `--remote-debugging-port=9344` ilə başladıb CDP üzər
 node tools/shot.mjs          # iPhone ölçüsündə ekran görüntüləri + tüstü testləri
 node tools/ui-test.mjs       # tema, ərzaq axtarışı/əlavə/silmə, AI recalc, gün seçimi
 node tools/edit-test.mjs     # gündəlikdə yemək redaktəsi (ad, qram, tərkib, yadda saxla)
+node tools/backup-test.mjs   # xüsusi ərzaq (əl ilə + AI) və ehtiyat kodunun bərpası
 node tools/api-test.mjs      # Gemini sorğularını mock cavablarla yoxlayır
 node tools/offline-test.mjs  # service worker və oflayn rejim
 ```
