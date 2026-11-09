@@ -28,7 +28,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="icon" href="icons/icon-192.png" sizes="192x192">
-  <link rel="stylesheet" href="styles.css?v=1.5.1">
+  <link rel="stylesheet" href="styles.css?v=1.6.0">
 </head>
 <body>
   <div class="app">
@@ -101,6 +101,23 @@
       <input type="file" id="fileCamera" accept="image/*" capture="environment" hidden>
       <input type="file" id="fileGallery" accept="image/*" hidden>
 
+      <section class="card text-add" id="textAddCard">
+        <h3>Şəkil yoxdur? Adını yaz</h3>
+        <p class="text-sm">Yeməyin adını (istəsən miqdarı ilə) yaz — AI tərkibini və qramlarını tapsın. Sonra istədiyin ərzağı əlavə edə və ya silə bilərsən.</p>
+        <form class="text-form" id="textForm" autocomplete="off">
+          <input id="textDish" type="text" maxlength="120" placeholder="Məs. toyuq plovu, 2 dilim pizza, 300 q lobya" aria-label="Yeməyin adı" required>
+          <button class="btn btn-primary" id="btnTextAnalyze" type="submit">AI tapsın</button>
+        </form>
+      </section>
+
+      <section class="card profile-prompt hidden" id="profilePrompt">
+        <div>
+          <h3>Şəxsi kalori normanı hesabla</h3>
+          <p class="text-sm">Yaş, boy, çəki və hədəfinə görə gündəlik kalori, zülal, karbohidrat və yağ normanı tap.</p>
+        </div>
+        <button class="btn btn-outline btn-sm" id="btnProfileGo" type="button">Hesabla →</button>
+      </section>
+
       <div class="banner hidden" id="iosHint">
         <span>📲 iPhone-da quraşdırmaq üçün Safari-də <b>Paylaş → Ekrana əlavə et</b> seç.</span>
         <button type="button" id="btnIosClose" aria-label="Bağla">×</button>
@@ -140,7 +157,7 @@
       <section class="card how">
         <h3>Necə işləyir?</h3>
         <ol class="steps">
-          <li><span>1</span><div><b>Şəkil çək</b><small>Kamera və ya qalereyadan seç</small></div></li>
+          <li><span>1</span><div><b>Şəkil çək və ya adını yaz</b><small>Kamera, qalereya və ya mətn</small></div></li>
           <li><span>2</span><div><b>AI tanısın</b><small>Yemək, tərkib və qramlar müəyyən olunur</small></div></li>
           <li><span>3</span><div><b>Gündəliyə yaz</b><small>Qramı düzəlt, kalorini izlə</small></div></li>
         </ol>
@@ -150,7 +167,10 @@
     <main class="view" id="view-diary">
       <div class="section-head">
         <h2>Gündəlik</h2>
-        <button class="btn btn-sm btn-outline" id="btnManual" type="button">+ Əl ilə</button>
+        <div class="head-actions">
+          <button class="btn btn-sm btn-outline" id="btnTextAdd" type="button">✨ Adla</button>
+          <button class="btn btn-sm btn-outline" id="btnManual" type="button">+ Əl ilə</button>
+        </div>
       </div>
 
       <section class="card hidden" id="manualCard">
@@ -195,7 +215,7 @@
       <section class="card" id="macroCard">
         <div class="card-head">
           <h3>Makrolar</h3>
-          <span class="muted">25% / 45% / 30%</span>
+          <span class="muted" id="macroSplit">25% / 45% / 30%</span>
         </div>
         <div id="macroList"></div>
       </section>
@@ -214,6 +234,57 @@
 
     <main class="view" id="view-settings">
       <h2 class="page-title">Ayarlar</h2>
+
+      <form class="card form" id="profileForm" novalidate>
+        <h3>Mənim normam</h3>
+        <p class="help">Məlumatlarını yaz — kalori və makro normanı Mifflin-St Jeor düsturu ilə hesablayıram. Hədəfi dəyişəndə hər şey dərhal yenilənir.</p>
+
+        <div class="sub-title">Cins</div>
+        <div class="segmented seg-2" id="pSex" role="group" aria-label="Cins">
+          <button type="button" data-sex="m">Kişi</button>
+          <button type="button" data-sex="f">Qadın</button>
+        </div>
+
+        <div class="grid-3">
+          <label class="field">Yaş
+            <input id="pAge" type="number" inputmode="numeric" min="14" max="100" placeholder="28">
+          </label>
+          <label class="field">Boy (sm)
+            <input id="pHeight" type="number" inputmode="numeric" min="120" max="230" placeholder="175">
+          </label>
+          <label class="field">Çəki (kq)
+            <input id="pWeight" type="number" inputmode="decimal" min="30" max="300" step="0.1" placeholder="78">
+          </label>
+        </div>
+
+        <div class="sub-title">Gündəlik aktivliyin necədir?</div>
+        <div class="act-list" id="pActivity" role="radiogroup" aria-label="Aktivlik səviyyəsi"></div>
+
+        <div class="sub-title">Məqsədin nədir?</div>
+        <div class="segmented" id="pGoal" role="group" aria-label="Məqsəd">
+          <button type="button" data-goal="lose">Arıqlamaq</button>
+          <button type="button" data-goal="maintain">Saxlamaq</button>
+          <button type="button" data-goal="gain">Çəki artırmaq</button>
+        </div>
+
+        <div id="pTargetWrap" class="hidden">
+          <label class="field">Hədəf çəki (kq)
+            <input id="pTarget" type="number" inputmode="decimal" min="30" max="300" step="0.1" placeholder="72">
+          </label>
+          <div class="sub-title">Nə sürətlə?</div>
+          <div class="segmented" id="pPace" role="group" aria-label="Sürət">
+            <button type="button" data-pace="0.25">Yavaş<small>0.25 kq/həftə</small></button>
+            <button type="button" data-pace="0.5">Orta<small>0.5 kq/həftə</small></button>
+            <button type="button" data-pace="0.75">Sürətli<small>0.75 kq/həftə</small></button>
+          </div>
+        </div>
+
+        <div id="pResult" class="plan-box"></div>
+
+        <button class="btn btn-primary btn-block" id="btnProfileSave" type="submit">Hesabla və tətbiq et</button>
+        <button class="btn btn-outline btn-block hidden" id="btnProfileClear" type="button">Profili sil</button>
+        <p class="help">Nəticə təxminidir və tibbi məsləhət deyil. 18 yaşdan kiçiksənsə, hamilə və ya xroniki xəstəliyin varsa, həkimlə məsləhətləşin.</p>
+      </form>
 
       <form class="card form" id="settingsForm">
         <h3>Görünüş</h3>
@@ -290,7 +361,7 @@
         <button class="btn btn-danger btn-block" id="btnWipe" type="button">Bütün məlumatları sil</button>
       </section>
 
-      <p class="footer-note">Kalori AI · PWA · v1.5.1</p>
+      <p class="footer-note">Kalori AI · PWA · v1.6.0</p>
     </main>
   </div>
 
@@ -362,8 +433,8 @@
   <div id="toast" role="status" aria-live="polite"></div>
 
   <noscript><p style="padding:24px;font-family:sans-serif">Bu tətbiq üçün JavaScript lazımdır.</p></noscript>
-  <script src="config.js?v=1.5.1"></script>
-  <script src="foods.js?v=1.5.1"></script>
-  <script src="app.js?v=1.5.1"></script>
+  <script src="config.js?v=1.6.0"></script>
+  <script src="foods.js?v=1.6.0"></script>
+  <script src="app.js?v=1.6.0"></script>
 </body>
 </html>

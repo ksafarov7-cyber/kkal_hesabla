@@ -2082,3 +2082,212 @@ details.hist[open] summary {
     padding-top: 8px;
   }
 }
+
+/* ---------- v1.6: adla əlavə, profil, norma ---------- */
+.head-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.text-add .text-sm {
+  margin: 6px 0 12px;
+}
+
+.text-form {
+  display: flex;
+  gap: 8px;
+}
+
+.text-form input {
+  flex: 1;
+  min-width: 0;
+  height: 46px;
+  padding: 0 13px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--soft);
+  color: var(--ink);
+  font-size: 16px;
+}
+
+.text-form input::placeholder {
+  color: var(--muted);
+  opacity: 0.65;
+}
+
+.text-form .btn {
+  flex: none;
+  height: 46px;
+  padding: 0 16px;
+}
+
+.profile-prompt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.profile-prompt .text-sm {
+  margin: 4px 0 0;
+}
+
+.profile-prompt .btn {
+  flex: none;
+}
+
+.sub-title {
+  margin: 16px 0 0;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--muted);
+}
+
+.segmented.seg-2 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.segmented button small {
+  display: block;
+  margin-top: 1px;
+  font-size: 10px;
+  font-weight: 500;
+  opacity: 0.75;
+}
+
+#pPace button {
+  height: auto;
+  padding: 8px 2px;
+}
+
+.grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0 10px;
+}
+
+.act-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.act-opt {
+  display: block;
+  width: 100%;
+  padding: 11px 13px;
+  border: 1.5px solid var(--line);
+  border-radius: 14px;
+  background: var(--soft);
+  text-align: left;
+}
+
+.act-opt b {
+  display: block;
+  font-size: 13.5px;
+}
+
+.act-opt small {
+  display: block;
+  margin-top: 2px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.act-opt.active {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+}
+
+.plan-box {
+  margin: 16px 0 12px;
+}
+
+.plan {
+  padding: 14px;
+  border-radius: 16px;
+  background: var(--soft);
+  border: 1px solid var(--line);
+}
+
+.plan-kcal {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.plan-kcal strong {
+  font-size: 34px;
+  letter-spacing: -1px;
+}
+
+.plan-kcal span {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.plan-goal {
+  margin-top: 4px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.plan-rows {
+  margin-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.plan-rows div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 12.5px;
+}
+
+.plan-rows span {
+  color: var(--muted);
+}
+
+.plan-macros {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.plan-macros div {
+  padding: 10px;
+  border-radius: 12px;
+  background: var(--card);
+  border: 1px solid var(--line);
+}
+
+.plan-macros small {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.plan-macros b {
+  display: block;
+  margin-top: 2px;
+  font-size: 17px;
+}
+
+.plan-macros em {
+  display: block;
+  font-style: normal;
+  font-size: 10.5px;
+  color: var(--brand);
+  font-weight: 650;
+}
+
+.note-warn {
+  background: var(--danger-soft);
+  color: var(--ink);
+}

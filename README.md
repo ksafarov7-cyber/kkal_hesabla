@@ -8,6 +8,9 @@ Backend yoxdur — tətbiq statik fayllardan ibarətdir və birbaşa Google Gemi
 
 ## Nə edir
 
+- **Adla əlavə (şəkilsiz)** — Analiz ekranında və ya Gündəlikdə **✨ Adla**: yeməyin adını (və ya “2 dilim pizza”) yaz, AI tərkibini və qramlarını tapır; ərzaq əlavə edə, silə, qramı dəyişə bilərsən.
+- **Şəxsi norma (Ayarlar → Mənim normam)** — cins, yaş, boy, çəki, aktivlik (4 sadə variant), məqsəd (arıqlamaq / saxlamaq / çəki artırmaq), hədəf çəki və sürət. Mifflin-St Jeor + TDEE ilə kalori, zülal (1.6–2.0 q/kq), yağ və karbohidrat hesablanır; hədəf çəkiyə təxmini çatma tarixi göstərilir.
+
 - **Şəkildən analiz** — kamera və ya qalereya. Şəkil avtomatik 1200px-ə kiçilir.
 - **AI cavabı** — yeməyin adı, növü, təsviri, tərkibi (hər məhsulun qramı, kalorisi, zülalı, karbohidratı, yağı), ümumi göstəricilər, AI inam faizi.
 - **Tərkibi əl ilə düzəlt** — hər məhsulun qramını dəyiş, lazımsızunu sil. `＋ Ərzaq əlavə et` ilə 100-dən çox məhsulluq **axtarışlı siyahı**dan seç.
@@ -41,12 +44,12 @@ PWA-nın telefonda quraşdırılması və kamerasının işləməsi üçün **HT
 
 **GitHub Pages ilə:** repo yaradın → zip-i kompüterdə açın → içindəki faylları repo **kökünə** yükləyin (`icons/` qovluğu da daxil) → **Settings → Pages → Deploy from a branch → `main` / `(root)`**. Link: `https://istifadəçi.github.io/repo/`.
 
-> Faylları dəyişdikdən sonra yenidən yükləyin. Service worker `v1.5.1` keşi avtomatik yeniləyir; ilk açılışda səhifəni iki dəfə yeniləmək lazım ola bilər.
+> Faylları dəyişdikdən sonra yenidən yükləyin. Service worker `v1.6.0` keşi avtomatik yeniləyir; ilk açılışda səhifəni iki dəfə yeniləmək lazım ola bilər.
 
 ## Yeniləmə
 
 1. Yeni `kalori-ai.zip`-i deploy et — **bütün faylları** əvəz et (xüsusən `index.html`, `app.js`, `styles.css`, `sw.js`).
-2. Tətbiqi aç → **Ayarlar → Versiya**. Orada **1.5.1** yazmalıdır. Əgər köhnə rəqəm görünürsə, fayllar hələ yenilənməyib.
+2. Tətbiqi aç → **Ayarlar → Versiya**. Orada **1.6.0** yazmalıdır. Əgər köhnə rəqəm görünürsə, fayllar hələ yenilənməyib.
 3. **Ayarlar → “Yeniləməni yoxla”** düyməsini bas və təsdiq et. Bu, service worker keşini təmizləyib proqramı yenidən açır — **qeydlər silinmir**.
 4. Alternativ: səhifəni iki dəfə yenilə və ya tətbiqi bağlayıb yenidən aç.
 
