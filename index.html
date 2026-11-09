@@ -279,9 +279,14 @@
           </div>
         </div>
 
+        <label class="field">Gündəlik kalori hədəfi (kkal)
+          <input id="pKcal" type="number" inputmode="numeric" min="800" max="8000" step="10" placeholder="2000">
+        </label>
+        <p class="help" id="pKcalHelp">Yuxarıdakıları seçəndə avtomatik hesablanır. İstəsən özün də dəyişə bilərsən — məqsəd (arıqlamaq / saxlamaq / artırmaq) kaloriyə görə avtomatik seçilir.</p>
+
         <div id="pResult" class="plan-box"></div>
 
-        <button class="btn btn-primary btn-block" id="btnProfileSave" type="submit">Hesabla və tətbiq et</button>
+        <button class="btn btn-primary btn-block" id="btnProfileSave" type="submit">Yadda saxla</button>
         <button class="btn btn-outline btn-block hidden" id="btnProfileClear" type="button">Profili sil</button>
         <p class="help">Nəticə təxminidir və tibbi məsləhət deyil. 18 yaşdan kiçiksənsə, hamilə və ya xroniki xəstəliyin varsa, həkimlə məsləhətləşin.</p>
       </form>
@@ -295,14 +300,8 @@
           <button type="button" data-theme-opt="dark">Tünd</button>
         </div>
 
-        <h3 class="mt">Hədəf</h3>
-        <label class="field">Gündəlik kalori hədəfi (kkal)
-          <input id="setGoal" type="number" inputmode="numeric" min="800" max="8000" step="10" required>
-        </label>
-        <p class="help" id="goalMacros"></p>
-
         <div id="keySetup" class="hidden">
-          <h3 class="mt">AI açarı</h3>
+          <h3>AI açarı</h3>
           <label class="field">Gemini API açarı
             <input id="setKey" type="password" autocomplete="off" spellcheck="false" placeholder="AQ... və ya AIza...">
           </label>
